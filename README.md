@@ -1,4 +1,4 @@
-# FishFinder v0.3.1 — display, settings and connection recovery
+# FishFinder v0.3.2 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -101,3 +101,9 @@ Client-generated WebSocket pings are disabled as a compatibility measure. v0.3 u
 Unexpected disconnects retain and log the underlying error, server close code/message when present, or an explicit no-close-frame message. A connection that ran at least ten seconds starts retrying after one second; repeated short failures back off to two, four and at most five seconds. Receiver verification and socket establishment add their own bounded request time to that delay. Shutdown and an IP change are logged as intentional closures. Live stability remains to be tested on the Pi.
 
 References: https://websocket-client.readthedocs.io/en/latest/app.html and https://github.com/cyoung/stratux/blob/master/main/managementinterface.go
+
+## v0.3.2 layout and repaint changes
+
+In idle mode all four ring labels align at the same x coordinate. With controls visible, the two intermediate labels retain their offset to avoid the header/setup overlay. Setup checkbuttons use flat styling with no surrounding widget border or focus frame; the small check indicators remain. The four central action buttons fill equal-width columns with identical padding/height.
+
+The map, including airports, repaints every 250 ms instead of every 500 ms. Nearby-airport lookup refreshes at least once per second, as well as whenever the center/range key changes. This redraws the existing offline data more frequently; it does not increase Stratux's GPS update rate or download airport records. Pi performance and actual native widget styling still need checking.

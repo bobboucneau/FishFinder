@@ -55,6 +55,8 @@ class Tests(unittest.TestCase):
         labels=[k.get('text','') for _,_,k in display.canvas.commands]
         self.assertIn('N123AB',labels)
         self.assertIn('10 NM',labels)
+        ranges=[coords[0] for _,coords,kw in display.canvas.commands if str(kw.get('text','')).endswith(' NM')]
+        self.assertEqual(len(ranges),4);self.assertEqual(len(set(ranges)),1)
         self.assertNotIn('Setup',labels);self.assertNotIn('Exit',labels)
         airport_labels=[kw['text'] for _,_,kw in display.canvas.commands if kw.get('tags')=='map-label' and kw.get('fill')==d.BLUE]
         self.assertTrue(airport_labels)

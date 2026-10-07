@@ -23,6 +23,8 @@ HORIZON = 300.0
 REPORT_AGE = 60.0
 TRAIL_AGE = 300.0
 OWN_AGE = 15.0
+FRAME_MS = 250
+AIRPORT_REFRESH_SECONDS = 1.0
 GREEN, YELLOW, RED = '#50ef97', '#ffd45c', '#ff565e'
 WHITE, MUTED, BG = '#e0f2ef', '#7b9a95', '#030909'
 
@@ -293,7 +295,7 @@ class Display:
         self.catalog=AirportCatalog(args.airports)
         self.airport_selected=None; self.airport_runways=False; self.airport_page=0
         self.airports_visible=self.config['airports_visible']; self.airport_hits=[]; self.airport_buttons=[]
-        self.airport_query=None; self.near_airports=[]
+        self.airport_query=None; self.airport_query_time=0.0; self.near_airports=[]
         self.anchor=None; self.last_own=None
         self.worker=None
         if not args.demo:
@@ -329,7 +331,7 @@ class Display:
             except queue.Empty:
                 pass
         self.draw()
-        self.root.after(500,self.tick)
+        self.root.after(FRAME_MS,self.tick)
 
     def draw(self):
         c=self.canvas;c.delete('all')
@@ -369,7 +371,7 @@ class Display:
         for fraction in (0.25,0.5,0.75,1):
             r=radius*fraction
             c.create_oval(self.cx-r,self.cy-r,self.cx+r,self.cy+r,outline='#285449',width=1)
-            self.text(580 if fraction in (0.5,0.75) else 426,400-398*fraction+13,f'{self.radius_nm*fraction:g} NM',fill=MUTED,size=9,anchor='w')
+            self.text(580 if not self.idle and fraction in (0.5,0.75) else 426,400-398*fraction+13,f'{self.radius_nm*fraction:g} NM',fill=MUTED,size=9,anchor='w')
         c.create_line(self.cx-radius,self.cy,self.cx+radius,self.cy,fill='#112921')
         c.create_line(self.cx,self.cy-radius,self.cx,self.cy+radius,fill='#112921')
         if not self.idle: self.text(400,143,'N',fill=GREEN,size=11)
@@ -382,10 +384,11 @@ class Display:
         self.airport_hits=[]
         if origin and self.airports_visible:
             key=(round(origin[0],3),round(origin[1],3),self.radius_nm)
-            if key != self.airport_query:
+            query_now=time.monotonic()
+            if key != self.airport_query or query_now-self.airport_query_time>=AIRPORT_REFRESH_SECONDS:
                 # Slightly wider cache envelope; final clipping uses exact current origin.
                 self.near_airports=self.catalog.nearby(origin,self.radius_nm+0.2,xy)
-                self.airport_query=key
+                self.airport_query=key;self.airport_query_time=query_now
             for _,airport,_ in self.near_airports:
                 pos=xy(airport['lat'],airport['lon'],origin)
                 if math.hypot(*pos)>self.radius_nm: continue

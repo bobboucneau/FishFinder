@@ -1,20 +1,20 @@
 {
-  "version": "0.3.1",
-  "change": "Persistent idle labels and range annotations; faster diagnostic traffic reconnects and INFO report logs",
+  "version": "0.3.2",
+  "change": "Aligned idle ring labels, flat setup checkboxes, uniform action buttons, faster airport repaint",
   "files": {
     "COLLECTOR-NOTES.md": "8559bf93c9104426d951306f6ef1ec9aad114a820aa1c19abcdf40240faa7b65",
     "FishFinder.py": "e138f1daa1b07dc1b3a94de1c01c3bb8d0bacbe169d8f754fe1161976dc3ae3a",
-    "README.md": "5a4c6b11208de5461e43d1d2a8e11318519b617001c457c3bbbce44ed9a72ad6",
+    "README.md": "932ff2f7f54f1b6bd6215107cb7e894d14a804977867926178355630ed34964a",
     "airport_data.py": "d2a1d762d26c4ad843822534eebd43f16e6c42ce739709fa8fd9e6748e45561a",
     "airports.json": "a983d199c9ca849e12382a35e67c96bde505e2db0ff9754255c0c8c4c0ee658c",
-    "preview-full.png": "2e3fe17c2ab75d2273103915fbaf1bc78dcc3b3ce553be148807d328c8d94d7d",
-    "preview-idle.png": "dad6cdc2e70d650e8e967c82bf0f82f2db43bd9fc76eb5ad3f355092f0088304",
+    "preview-full.png": "4fae170741a67b460737b586fd9e0e3ee5b027216304c3522163cc3bfa1b3202",
+    "preview-idle.png": "bf0c253c60e00428f0529d41ef4a775dd23a9f66b0cb7ee339d682bb9d947634",
     "preview-runways.png": "9ccfae5656c744d7e588a3a9184eecd1d7a7b1b612065b7e506ff73ae3941b93",
     "settings.py": "9b919beefea497a87640eed2368ac94d404eeeee99961a97f8eb971b199c473b",
-    "setup_screen.py": "8d8875b97121f1af8dcb8209ec9399bd226318603f46b5cae955ce1447ed5e0d",
+    "setup_screen.py": "77bb0d86678ba1244a2a1e4593e9792e306253dcb436d1232751de2305f7964e",
     "test_airports.py": "a53a6cd21072d091c7a7e10bf85e572f2a143019126789a8dbfe334943e4bd4f",
-    "test_settings_display.py": "df9e2a8a50f535186dc319017206128dc1393dcfdfee084c119d7e6e12f7683f",
-    "traffic_display.py": "30d6fda501b3c83b05bbd089359ac33ecce9aca75f3b68a74a65d8bf55c359ca",
+    "test_settings_display.py": "8a42df02b1dc0d58e25fd80f8acb389b68f864b767a30b3a70b0efae419a1160",
+    "traffic_display.py": "ed635189b397feae29346da65600f60ab71cbb6eec7ed532ec70fb921ba9988f",
     "update_airports.py": "222802049307460e96dfd2e70a3a6b4bb68de2a3b7779f52c434f94c3a103034"
   }
 }
