@@ -1,10 +1,10 @@
 {
-  "version": "0.3.2",
-  "change": "Aligned idle ring labels, flat setup checkboxes, uniform action buttons, faster airport repaint",
+  "version": "0.3.3",
+  "change": "Retain v0.3.2 layout; restore saved=False logs; decouple traffic writes from receipt; keep normal traffic silence connected",
   "files": {
     "COLLECTOR-NOTES.md": "8559bf93c9104426d951306f6ef1ec9aad114a820aa1c19abcdf40240faa7b65",
-    "FishFinder.py": "e138f1daa1b07dc1b3a94de1c01c3bb8d0bacbe169d8f754fe1161976dc3ae3a",
-    "README.md": "932ff2f7f54f1b6bd6215107cb7e894d14a804977867926178355630ed34964a",
+    "FishFinder.py": "a118cf65bf94e6b712dbfaa0ca3a9cb8e6ffc66e13516a46babeb8429854c0d9",
+    "README.md": "934d386d7608eea536542ba3b683ac75d907f97d1e5743a150f4fbe2d7548f70",
     "airport_data.py": "d2a1d762d26c4ad843822534eebd43f16e6c42ce739709fa8fd9e6748e45561a",
     "airports.json": "a983d199c9ca849e12382a35e67c96bde505e2db0ff9754255c0c8c4c0ee658c",
     "preview-full.png": "4fae170741a67b460737b586fd9e0e3ee5b027216304c3522163cc3bfa1b3202",
@@ -13,7 +13,7 @@
     "settings.py": "9b919beefea497a87640eed2368ac94d404eeeee99961a97f8eb971b199c473b",
     "setup_screen.py": "77bb0d86678ba1244a2a1e4593e9792e306253dcb436d1232751de2305f7964e",
     "test_airports.py": "a53a6cd21072d091c7a7e10bf85e572f2a143019126789a8dbfe334943e4bd4f",
-    "test_settings_display.py": "8a42df02b1dc0d58e25fd80f8acb389b68f864b767a30b3a70b0efae419a1160",
+    "test_settings_display.py": "9aee5f3d7d68cc50b628d0d88041419b036724a0d45c25391f7b80b1354fae3e",
     "traffic_display.py": "ed635189b397feae29346da65600f60ab71cbb6eec7ed532ec70fb921ba9988f",
     "update_airports.py": "222802049307460e96dfd2e70a3a6b4bb68de2a3b7779f52c434f94c3a103034"
   }

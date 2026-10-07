@@ -139,6 +139,35 @@ class Tests(unittest.TestCase):
             with closing(sqlite3.connect(path)) as conn,patch.object(collector.logging,'info') as info:
                 collector.record_traffic(conn,dict(Icao_addr=124,Reg='N124AB',Lat=37,Lng=-122,Alt=10000,Speed=100),time.time())
                 self.assertTrue(info.called)
+                info.reset_mock()
+                collector.record_traffic(conn,dict(Icao_addr=124,Reg='N124AB',Lat=37,Lng=-122,Alt=10000,Speed=100),time.time())
+                self.assertTrue(info.called);self.assertFalse(info.call_args.args[-1])
+
+    def test_quiet_stream_is_normal_by_default(self):
+        self.assertEqual(collector.TRAFFIC_IDLE_SECONDS,0)
+        self.assertFalse(collector.traffic_stream_idle(None,1000,20))
+        self.assertFalse(collector.traffic_stream_idle(1,1000,0))
+        self.assertTrue(collector.traffic_stream_idle(1,22,20))
+
+    def test_database_processing_runs_off_websocket_callback(self):
+        import threading
+        arrived=threading.Event();release=threading.Event();second_received=threading.Event()
+        stopped=threading.Event()
+        class WS:
+            def __init__(self,url,**callbacks):self.callbacks=callbacks
+            def run_forever(self,**kwargs):
+                self.callbacks['on_open'](self)
+                self.callbacks['on_message'](self,'{"Icao_addr":123}')
+                self.asserted=arrived.wait(1)
+                self.callbacks['on_message'](self,'{"Icao_addr":124}')
+                second_received.set();release.set();stopped.set()
+            def close(self):pass
+        def slow_record(*args):arrived.set();release.wait(2)
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'data.db';collector.initialize(path)
+            with patch.object(collector,'fetch_situation',return_value={}),patch.object(collector.websocket,'WebSocketApp',WS,create=True),patch.object(collector,'record_traffic',side_effect=slow_record):
+                collector.traffic_loop(stopped,path)
+        self.assertTrue(arrived.is_set());self.assertTrue(second_received.is_set())
 
     def test_truncated_update_retains_cache(self):
         with tempfile.TemporaryDirectory() as tmp:

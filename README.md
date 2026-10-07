@@ -1,4 +1,4 @@
-# FishFinder v0.3.2 — display, settings and connection recovery
+# FishFinder v0.3.3 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -47,7 +47,7 @@ Ownship altitude display now prefers GPSAltitudeMSL, falling back to the older G
 
 ## Stratux reachability
 
-The collector validates the /getSituation response before opening its traffic WebSocket. Network identity/SSID alone cannot establish that the correct receiver is reachable; the API response check does. With no receiver, it logs a transition to “Stratux not available. Waiting...” and retries every five seconds without repeated network tracebacks. The live display shows that message via the shared database. A reachable Stratux without a valid GPS fix is distinct from an unreachable receiver. Unexpected processing/database faults still produce diagnostic logs. Saved traffic reports and ownship reports are logged at INFO again. Unsaved traffic frames stay at DEBUG. Use --log-level DEBUG to include those frames, or --log-level WARNING for a quieter console.
+The collector validates the /getSituation response before opening its traffic WebSocket. Network identity/SSID alone cannot establish that the correct receiver is reachable; the API response check does. With no receiver, it logs a transition to “Stratux not available. Waiting...” and retries every five seconds without repeated network tracebacks. The live display shows that message via the shared database. A reachable Stratux without a valid GPS fix is distinct from an unreachable receiver. Unexpected processing/database faults still produce diagnostic logs. All identifiable traffic frames, including saved=False, and ownship reports are logged at INFO. Use --log-level WARNING for a quieter console or DEBUG for additional diagnostics.
 
 Both programs must be upgraded for connection status. An older collector cannot supply receiver_status; the display then says Waiting for collector. Existing reports expire normally. No automatic boot services are installed.
 
@@ -86,7 +86,7 @@ Network selection remains user initiated. After joining remembered internet Wi-F
 
 ## Verification
 
-Sixteen automated tests cover airport lookup and geometry, runway alignment, idle/wake touch behavior, expanded scope, settings validation/persistence, vertical closure and unknown-data handling, idempotent database migration, missing-altitude ownship, wrong-device API response, quiet disconnected retries, WebSocket keepalive/retry options and error diagnostics, INFO report logging, and preservation on failed/truncated data updates. WebSocket is stubbed for collector database/probe tests if websocket-client is absent on the test host; no live traffic stream is opened. Preview images render Canvas drawing commands and are illustrative.
+Eighteen automated tests cover airport lookup and geometry, runway alignment, idle/wake touch behavior, expanded scope, settings validation/persistence, vertical closure and unknown-data handling, idempotent database migration, missing-altitude ownship, wrong-device API response, quiet disconnected retries, WebSocket keepalive/retry options and error diagnostics, INFO report logging, and preservation on failed/truncated data updates. WebSocket is stubbed for collector database/probe tests if websocket-client is absent on the test host; no live traffic stream is opened. Preview images render Canvas drawing commands and are illustrative.
 
 Actual Tk widgets, the touch keyboard, NetworkManager window, Stratux firmware field availability, fullscreen monitor placement, and Pi performance still require on-device testing. The airport snapshot remains the October 6 snapshot; this release does not refresh it automatically.
 
@@ -107,3 +107,9 @@ References: https://websocket-client.readthedocs.io/en/latest/app.html and https
 In idle mode all four ring labels align at the same x coordinate. With controls visible, the two intermediate labels retain their offset to avoid the header/setup overlay. Setup checkbuttons use flat styling with no surrounding widget border or focus frame; the small check indicators remain. The four central action buttons fill equal-width columns with identical padding/height.
 
 The map, including airports, repaints every 250 ms instead of every 500 ms. Nearby-airport lookup refreshes at least once per second, as well as whenever the center/range key changes. This redraws the existing offline data more frequently; it does not increase Stratux's GPS update rate or download airport records. Pi performance and actual native widget styling still need checking.
+
+## v0.3.3 traffic logging and processing
+
+Every identifiable traffic frame logs saved=True/False at INFO again. WebSocket callbacks parse and enqueue traffic promptly; a separate traffic-writer thread owns the database connection, so SQLite writes and per-report logging cannot block socket receipt. The queue is bounded to 1,024 observations and favors recent data if full; any overflow is reported when a connection ends. Receipt timestamps are preserved, so queued data is never made to look newer than it is. Processing that takes at least one second logs a diagnostic warning. A failed writer stops the collector rather than silently leaving a connection with no database updates.
+
+A quiet traffic stream is normal when there are no local aircraft. No inactivity reconnect runs by default. An optional --traffic-idle-seconds 20 can refresh a previously active but quiet connection; it cannot distinguish a stalled stream from normal traffic silence and may cause unnecessary reconnects. Leave it at zero normally. There is no forced refresh before the first traffic frame. The GUI remains independent of the collector.
