@@ -141,7 +141,7 @@ class Tests(unittest.TestCase):
                 self.assertTrue(info.called)
                 info.reset_mock()
                 collector.record_traffic(conn,dict(Icao_addr=124,Reg='N124AB',Lat=37,Lng=-122,Alt=10000,Speed=100),time.time())
-                self.assertTrue(info.called);self.assertFalse(info.call_args.args[-1])
+                self.assertTrue(info.called);self.assertFalse(info.call_args.args[6]);self.assertIn('sample_interval',info.call_args.args[7])
 
     def test_quiet_stream_is_normal_by_default(self):
         self.assertEqual(collector.TRAFFIC_IDLE_SECONDS,0)
@@ -168,6 +168,16 @@ class Tests(unittest.TestCase):
             with patch.object(collector,'fetch_situation',return_value={}),patch.object(collector.websocket,'WebSocketApp',WS,create=True),patch.object(collector,'record_traffic',side_effect=slow_record):
                 collector.traffic_loop(stopped,path)
         self.assertTrue(arrived.is_set());self.assertTrue(second_received.is_set())
+
+    def test_report_rejection_reasons_are_visible(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'data.db';collector.initialize(path)
+            base=dict(Icao_addr=125,Reg='N125AB',Lat=37,Lng=-122,Alt=10000,Speed=100)
+            with closing(sqlite3.connect(path)) as conn:
+                for changes,reason in [(dict(Age=12),'position_age_outside_0_to_10s'),(dict(Position_valid=False),'position_flag_invalid'),(dict(Speed_valid=False),'speed_flag_invalid'),(dict(Alt=None),'altitude_missing_or_invalid')]:
+                    with patch.object(collector.logging,'info') as info:
+                        self.assertFalse(collector.record_traffic(conn,dict(base,**changes),time.time()))
+                        self.assertIn(reason,info.call_args.args[7])
 
     def test_truncated_update_retains_cache(self):
         with tempfile.TemporaryDirectory() as tmp:

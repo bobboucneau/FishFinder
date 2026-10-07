@@ -1,4 +1,4 @@
-# FishFinder v0.3.3 — display, settings and connection recovery
+# FishFinder v0.3.4 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -86,7 +86,7 @@ Network selection remains user initiated. After joining remembered internet Wi-F
 
 ## Verification
 
-Eighteen automated tests cover airport lookup and geometry, runway alignment, idle/wake touch behavior, expanded scope, settings validation/persistence, vertical closure and unknown-data handling, idempotent database migration, missing-altitude ownship, wrong-device API response, quiet disconnected retries, WebSocket keepalive/retry options and error diagnostics, INFO report logging, and preservation on failed/truncated data updates. WebSocket is stubbed for collector database/probe tests if websocket-client is absent on the test host; no live traffic stream is opened. Preview images render Canvas drawing commands and are illustrative.
+Nineteen automated tests cover airport lookup and geometry, runway alignment, idle/wake touch behavior, expanded scope, settings validation/persistence, vertical closure and unknown-data handling, idempotent database migration, missing-altitude ownship, wrong-device API response, quiet disconnected retries, WebSocket keepalive/retry options and error diagnostics, INFO report logging, and preservation on failed/truncated data updates. WebSocket is stubbed for collector database/probe tests if websocket-client is absent on the test host; no live traffic stream is opened. Preview images render Canvas drawing commands and are illustrative.
 
 Actual Tk widgets, the touch keyboard, NetworkManager window, Stratux firmware field availability, fullscreen monitor placement, and Pi performance still require on-device testing. The airport snapshot remains the October 6 snapshot; this release does not refresh it automatically.
 
@@ -113,3 +113,7 @@ The map, including airports, repaints every 250 ms instead of every 500 ms. Near
 Every identifiable traffic frame logs saved=True/False at INFO again. WebSocket callbacks parse and enqueue traffic promptly; a separate traffic-writer thread owns the database connection, so SQLite writes and per-report logging cannot block socket receipt. The queue is bounded to 1,024 observations and favors recent data if full; any overflow is reported when a connection ends. Receipt timestamps are preserved, so queued data is never made to look newer than it is. Processing that takes at least one second logs a diagnostic warning. A failed writer stops the collector rather than silently leaving a connection with no database updates.
 
 A quiet traffic stream is normal when there are no local aircraft. No inactivity reconnect runs by default. An optional --traffic-idle-seconds 20 can refresh a previously active but quiet connection; it cannot distinguish a stalled stream from normal traffic silence and may cause unnecessary reconnects. Leave it at zero normally. There is no forced refresh before the first traffic frame. The GUI remains independent of the collector.
+
+## v0.3.4 save diagnostics
+
+Every traffic log now includes reason=accepted or one or more rejection reasons (invalid position/speed flags, coordinates, age, altitude, or the one-second sample interval). It also shows the raw Position_valid, Speed_valid, Age and ExtrapolatedPosition fields. Save/retention rules are unchanged. Missing flags/age continue to be accepted under the existing older-feed compatibility rules. These diagnostics distinguish sampling from stale/invalid data without inferring freshness from moving coordinates.

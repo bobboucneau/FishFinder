@@ -121,6 +121,13 @@ def record_traffic(conn, data, received_at=None):
     position_age=number(data.get('Age'))
     position_ok = data.get('Position_valid', True) is True and valid_position(lat, lng) and (position_age is None or 0 <= position_age <= 10)
     speed_ok = data.get('Speed_valid', True) is True and speed is not None and speed >= 0
+    reasons=[]
+    if data.get('Position_valid',True) is not True: reasons.append('position_flag_invalid')
+    if not valid_position(lat,lng): reasons.append('coordinates_invalid')
+    if position_age is not None and not 0<=position_age<=10: reasons.append('position_age_outside_0_to_10s')
+    if data.get('Speed_valid',True) is not True: reasons.append('speed_flag_invalid')
+    if speed is None or speed<0: reasons.append('speed_missing_or_invalid')
+    if altitude is None: reasons.append('altitude_missing_or_invalid')
     report_ok = position_ok and speed_ok and altitude is not None
     with conn:
         conn.execute('INSERT OR IGNORE INTO aircraft (tail) VALUES (?)', (tail,))
@@ -141,14 +148,17 @@ def record_traffic(conn, data, received_at=None):
             previous_time = number(previous[0]) if previous else None
             report_ok = (previous_time is None or timestamp < previous_time
                          or timestamp - previous_time >= REPORT_INTERVAL)
+            if not report_ok: reasons.append(f'sample_interval({timestamp-previous_time:.3f}s)')
         if report_ok:
             conn.execute('''INSERT INTO reports
                 (tail, time, speed, asl, longitude, latitude, comparison_alt, alt_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
                 (tail, timestamp, speed, altitude, lng, lat,
                  altitude if data.get('AltIsGNSS') is False and number(data.get('AgeLastAlt')) is not None and 0 <= number(data.get('AgeLastAlt')) <= 10 else None,
                  'pressure' if data.get('AltIsGNSS') is False else None))
-    logging.info('Traffic %s | altitude=%s speed=%s position=(%s, %s) saved=%s',
-        tail, altitude, speed, lat, lng, report_ok)
+    logging.info('Traffic %s | altitude=%s speed=%s position=(%s, %s) saved=%s | reason=%s | Position_valid=%r Speed_valid=%r Age=%r ExtrapolatedPosition=%r',
+        tail, altitude, speed, lat, lng, report_ok, ','.join(reasons) or 'accepted',
+        data.get('Position_valid','missing'),data.get('Speed_valid','missing'),
+        data.get('Age','missing'),data.get('ExtrapolatedPosition','missing'))
     return report_ok
 
 
