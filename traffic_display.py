@@ -26,6 +26,7 @@ OWN_AGE = 15.0
 FRAME_MS = 250
 AIRPORT_REFRESH_SECONDS = 1.0
 GREEN, YELLOW, RED = '#50ef97', '#ffd45c', '#ff565e'
+ESTIMATED = '#c58aff'
 WHITE, MUTED, BG = '#e0f2ef', '#7b9a95', '#030909'
 
 
@@ -39,6 +40,8 @@ class Point:
     altitude: float
     comparison_alt: float = None
     alt_ref: str = None
+    estimated: bool = False
+    position_age: float = None
 
 
 @dataclass
@@ -66,7 +69,7 @@ def point(row):
     t, lat, lon, speed, alt = values
     if not (-90 <= lat <= 90 and -180 <= lon <= 180 and speed >= 0):
         return None
-    return Point(row['id'], t, lat, lon, speed, alt, finite(row['comparison_alt']) if 'comparison_alt' in row.keys() else None, row['alt_ref'] if 'alt_ref' in row.keys() else None)
+    return Point(row['id'], t, lat, lon, speed, alt, finite(row['comparison_alt']) if 'comparison_alt' in row.keys() else None, row['alt_ref'] if 'alt_ref' in row.keys() else None, bool(row['estimated']) if 'estimated' in row.keys() else False, finite(row['position_age']) if 'position_age' in row.keys() else None)
 
 
 def xy(lat, lon, origin):
@@ -157,6 +160,7 @@ def vertical_clear(target, own, threshold, horizon=300):
     if not own or not target or own[-1].altitude is None: return False
     def state(history):
         latest=history[-1]
+        if latest.estimated: return None
         if latest.comparison_alt is None or latest.alt_ref != 'pressure': return None
         recent=[p for p in history if 0<=latest.time-p.time<=20 and
                 p.comparison_alt is not None and p.alt_ref==latest.alt_ref]
@@ -441,6 +445,7 @@ class Display:
                 if not fix:
                     reason+=' (green is display-only)'
                 heading=None if tv is None or math.hypot(*tv)<1e-10 else math.degrees(math.atan2(tv[0],tv[1]))%360
+                if p.estimated: reason+=' · Estimated position from Stratux'
                 infos[tail]=(p,color,reason,cpa,heading,age,math.hypot(*pos),fix)
                 if math.hypot(*pos)>self.radius_nm:
                     outside+=1;continue
@@ -450,16 +455,17 @@ class Display:
                 if trail[-1]!=p:
                     trail.append(p)
                 coords=[xy(q.lat,q.lon,origin) for q in trail]
-                for a,b in zip(coords,coords[1:]):
-                    self.line(a,b,color,width=2)
+                for i,(a,b) in enumerate(zip(coords,coords[1:])):
+                    uncertain=any(q.estimated for q in history if trail[i].time<=q.time<=trail[i+1].time)
+                    self.line(a,b,ESTIMATED if uncertain else color,width=2,**({'dash':(3,4)} if uncertain else {}))
                 if tv is not None:
                     end=(pos[0]+tv[0]*HORIZON,pos[1]+tv[1]*HORIZON)
-                    self.line(pos,end,color,dash=(5,4),width=1,arrow=tk.LAST)
+                    self.line(pos,end,ESTIMATED if p.estimated else color,dash=(5,4),width=1,arrow=tk.LAST)
                 x,y=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels
                 sz=7*self.unit
                 blink=color==RED and int(now*2)%2==0
                 c.create_polygon(x,y-sz,x+sz,y,x,y+sz,x-sz,y,fill=BG if separated else WHITE if blink else color,outline=color,width=2)
-                label=(snap.labels or {}).get(tail,tail)+(' · OLD' if age>10 else '')
+                label=(snap.labels or {}).get(tail,tail)+(' · EST' if p.estimated else '')+(' · OLD' if age>10 else '')
                 # Keep the label inside the scope even near its perimeter.
                 side=-1 if pos[0]>=0 else 1
                 c.create_text(x+side*12*self.unit,y-10*self.unit,text=label,anchor='e' if side<0 else 'w',
@@ -469,7 +475,7 @@ class Display:
         self.rect(215,50,585,131,fill=BG,outline='')
         self.text(400,68,'FISHFINDER'+(' · DEMO' if snap.demo else ''),size=17)
         self.text(400,96,mode,fill=WHITE if fix else YELLOW,size=12)
-        self.text(400,119,f'{self.config["horizon_minutes"]} min projection · hollow gray = vertically distant',fill=MUTED,size=10)
+        self.text(400,119,f'{self.config["horizon_minutes"]} min · purple dashed = estimated · gray = distant',fill=MUTED,size=10)
         self.rect(318,158,482,185,fill='#10253d',outline=BLUE)
         airport_status='Airports unavailable' if self.catalog.error else 'Airports ON' if self.airports_visible else 'Airports OFF'
         self.text(400,171,airport_status,fill=BLUE,size=10)

@@ -67,6 +67,9 @@ def initialize(db_path=DATABASE_PATH):
                 columns = {row[1] for row in conn.execute(f'PRAGMA table_info({table})')}
                 for name, kind in [('comparison_alt','REAL'),('alt_ref','TEXT')]:
                     if name not in columns: conn.execute(f'ALTER TABLE {table} ADD COLUMN {name} {kind}')
+            columns = {row[1] for row in conn.execute('PRAGMA table_info(reports)')}
+            for name, kind in [('estimated', 'INTEGER DEFAULT 0'), ('position_age', 'REAL')]:
+                if name not in columns: conn.execute(f'ALTER TABLE reports ADD COLUMN {name} {kind}')
             conn.execute('CREATE TABLE IF NOT EXISTS receiver_status (id INTEGER PRIMARY KEY CHECK(id=1), time REAL, available INTEGER, message TEXT)')
             conn.execute('CREATE INDEX IF NOT EXISTS aircraft_time_idx ON aircraft(time)')
             conn.execute('CREATE INDEX IF NOT EXISTS reports_time_idx ON reports(time)')
@@ -119,12 +122,14 @@ def record_traffic(conn, data, received_at=None):
     altitude, speed = number(data.get('Alt')), number(data.get('Speed'))
     # Explicit validity flags take precedence; older feeds may omit them.
     position_age=number(data.get('Age'))
-    position_ok = data.get('Position_valid', True) is True and valid_position(lat, lng) and (position_age is None or 0 <= position_age <= 10)
+    estimated = data.get('ExtrapolatedPosition') is True
+    age_limit = 60 if estimated else 10
+    position_ok = data.get('Position_valid', True) is True and valid_position(lat, lng) and (position_age is None or 0 <= position_age <= age_limit)
     speed_ok = data.get('Speed_valid', True) is True and speed is not None and speed >= 0
     reasons=[]
     if data.get('Position_valid',True) is not True: reasons.append('position_flag_invalid')
     if not valid_position(lat,lng): reasons.append('coordinates_invalid')
-    if position_age is not None and not 0<=position_age<=10: reasons.append('position_age_outside_0_to_10s')
+    if position_age is not None and not 0<=position_age<=age_limit: reasons.append(f'position_age_outside_0_to_{age_limit}s')
     if data.get('Speed_valid',True) is not True: reasons.append('speed_flag_invalid')
     if speed is None or speed<0: reasons.append('speed_missing_or_invalid')
     if altitude is None: reasons.append('altitude_missing_or_invalid')
@@ -151,12 +156,12 @@ def record_traffic(conn, data, received_at=None):
             if not report_ok: reasons.append(f'sample_interval({timestamp-previous_time:.3f}s)')
         if report_ok:
             conn.execute('''INSERT INTO reports
-                (tail, time, speed, asl, longitude, latitude, comparison_alt, alt_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (tail, time, speed, asl, longitude, latitude, comparison_alt, alt_ref, estimated, position_age) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                 (tail, timestamp, speed, altitude, lng, lat,
-                 altitude if data.get('AltIsGNSS') is False and number(data.get('AgeLastAlt')) is not None and 0 <= number(data.get('AgeLastAlt')) <= 10 else None,
-                 'pressure' if data.get('AltIsGNSS') is False else None))
+                 altitude if not estimated and data.get('AltIsGNSS') is False and number(data.get('AgeLastAlt')) is not None and 0 <= number(data.get('AgeLastAlt')) <= 10 else None,
+                 'pressure' if data.get('AltIsGNSS') is False else None, int(estimated), position_age))
     logging.info('Traffic %s | altitude=%s speed=%s position=(%s, %s) saved=%s | reason=%s | Position_valid=%r Speed_valid=%r Age=%r ExtrapolatedPosition=%r',
-        tail, altitude, speed, lat, lng, report_ok, ','.join(reasons) or 'accepted',
+        tail, altitude, speed, lat, lng, report_ok, ','.join(reasons) or ('accepted_estimated' if estimated else 'accepted'),
         data.get('Position_valid','missing'),data.get('Speed_valid','missing'),
         data.get('Age','missing'),data.get('ExtrapolatedPosition','missing'))
     return report_ok

@@ -1,4 +1,4 @@
-# FishFinder v0.3.4 — display, settings and connection recovery
+# FishFinder v0.3.5 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -86,7 +86,7 @@ Network selection remains user initiated. After joining remembered internet Wi-F
 
 ## Verification
 
-Nineteen automated tests cover airport lookup and geometry, runway alignment, idle/wake touch behavior, expanded scope, settings validation/persistence, vertical closure and unknown-data handling, idempotent database migration, missing-altitude ownship, wrong-device API response, quiet disconnected retries, WebSocket keepalive/retry options and error diagnostics, INFO report logging, and preservation on failed/truncated data updates. WebSocket is stubbed for collector database/probe tests if websocket-client is absent on the test host; no live traffic stream is opened. Preview images render Canvas drawing commands and are illustrative.
+Twenty automated tests cover airport lookup and geometry, runway alignment, idle/wake touch behavior, expanded scope, settings validation/persistence, vertical closure and unknown-data handling, idempotent database migration, missing-altitude ownship, wrong-device API response, quiet disconnected retries, WebSocket keepalive/retry options and error diagnostics, INFO report logging, and preservation on failed/truncated data updates. WebSocket is stubbed for collector database/probe tests if websocket-client is absent on the test host; no live traffic stream is opened. Preview images render Canvas drawing commands and are illustrative.
 
 Actual Tk widgets, the touch keyboard, NetworkManager window, Stratux firmware field availability, fullscreen monitor placement, and Pi performance still require on-device testing. The airport snapshot remains the October 6 snapshot; this release does not refresh it automatically.
 
@@ -117,3 +117,7 @@ A quiet traffic stream is normal when there are no local aircraft. No inactivity
 ## v0.3.4 save diagnostics
 
 Every traffic log now includes reason=accepted or one or more rejection reasons (invalid position/speed flags, coordinates, age, altitude, or the one-second sample interval). It also shows the raw Position_valid, Speed_valid, Age and ExtrapolatedPosition fields. Save/retention rules are unchanged. Missing flags/age continue to be accepted under the existing older-feed compatibility rules. These diagnostics distinguish sampling from stale/invalid data without inferring freshness from moving coordinates.
+
+### v0.3.5 estimated traffic
+
+Install both FishFinder.py and traffic_display.py together. The collector migrates existing databases automatically. Valid Stratux extrapolations are saved at the normal one-second interval while position Age is at most 60 seconds; ordinary positions retain the 10-second limit. Invalid position/speed flags still reject reports. Estimated trail segments and projections are dashed purple, and aircraft labels show EST; symbols retain conflict colors. Estimated altitude never establishes vertical clearance. No extrapolation is invented when Stratux stops sending data. Existing rows default to observed. Twenty automated tests pass; Raspberry Pi display testing remains required.

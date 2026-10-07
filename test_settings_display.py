@@ -169,6 +169,22 @@ class Tests(unittest.TestCase):
                 collector.traffic_loop(stopped,path)
         self.assertTrue(arrived.is_set());self.assertTrue(second_received.is_set())
 
+    def test_extrapolated_reports_preserve_uncertainty(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'data.db';collector.initialize(path);collector.initialize(path)
+            base=dict(Icao_addr=125,Lat=37,Lng=-122,Alt=10000,Speed=100,
+                      Position_valid=True,Speed_valid=True,Age=30,ExtrapolatedPosition=True,
+                      AltIsGNSS=False,AgeLastAlt=0)
+            with closing(sqlite3.connect(path)) as conn:
+                self.assertTrue(collector.record_traffic(conn,base))
+                self.assertFalse(collector.record_traffic(conn,dict(base,Age=61)))
+                self.assertFalse(collector.record_traffic(conn,dict(base,Position_valid=False)))
+                self.assertFalse(collector.record_traffic(conn,dict(base,ExtrapolatedPosition=False)))
+            snap=d.read_snapshot(path)
+            p=snap.reports['icao:00007D'][-1]
+            self.assertTrue(p.estimated);self.assertEqual(p.position_age,30)
+            self.assertIsNone(p.comparison_alt)
+
     def test_report_rejection_reasons_are_visible(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'data.db';collector.initialize(path)
