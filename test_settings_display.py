@@ -1,3 +1,4 @@
+from contextlib import closing
 import json
 import math
 from pathlib import Path
@@ -52,7 +53,13 @@ class Tests(unittest.TestCase):
         display.last_touch=time.monotonic()-11;display.draw()
         self.assertTrue(display.idle);self.assertEqual(display.buttons,[])
         labels=[k.get('text','') for _,_,k in display.canvas.commands]
-        self.assertFalse(any(labels));self.assertTrue(display.hits)
+        self.assertIn('N123AB',labels)
+        self.assertIn('10 NM',labels)
+        self.assertNotIn('Setup',labels);self.assertNotIn('Exit',labels)
+        airport_labels=[kw['text'] for _,_,kw in display.canvas.commands if kw.get('tags')=='map-label' and kw.get('fill')==d.BLUE]
+        self.assertTrue(airport_labels)
+        self.assertTrue(all(' · ' not in label for label in airport_labels))
+        self.assertTrue(display.hits)
         display.tap(SimpleNamespace(x=400,y=770))
         self.assertFalse(display.idle);self.assertFalse(display.exit_pending)
         display.tap(SimpleNamespace(x=400,y=770));self.assertTrue(display.exit_pending)
@@ -97,6 +104,39 @@ class Tests(unittest.TestCase):
             with sqlite3.connect(path) as conn:
                 row=conn.execute('SELECT available,message FROM receiver_status').fetchone()
                 self.assertEqual(row,(0,'Stratux not available. Waiting...'))
+
+    def test_traffic_reconnect_options_and_diagnostics(self):
+        self.assertEqual([collector.traffic_retry_delay(n) for n in range(1,8)],[1,2,4,5,5,5,5])
+        options=collector.traffic_socket_options()
+        self.assertIn((collector.socket.SOL_SOCKET,collector.socket.SO_KEEPALIVE,1),options)
+        captured={}
+        class Stop:
+            stopped=False
+            def is_set(self):return self.stopped
+            def wait(self,delay):captured['delay']=delay;self.stopped=True;return True
+        class WS:
+            def __init__(self,url,**callbacks):self.callbacks=callbacks
+            def run_forever(self,**kwargs):
+                captured.update(kwargs)
+                self.callbacks['on_open'](self)
+                self.callbacks['on_error'](self,TimeoutError('test link failure'))
+                self.callbacks['on_close'](self,None,None)
+            def close(self):pass
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'data.db';collector.initialize(path)
+            with patch.object(collector,'fetch_situation',return_value={}),patch.object(collector.websocket,'WebSocketApp',WS,create=True),patch.object(collector.logging,'warning') as warning:
+                collector.traffic_loop(Stop(),path)
+                self.assertIn('test link failure',warning.call_args.args[1])
+        self.assertEqual(captured['ping_interval'],0)
+        self.assertEqual(captured['delay'],1)
+        self.assertEqual(captured['http_no_proxy'],['192.168.10.1'])
+
+    def test_saved_reports_return_to_info_level(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'data.db';collector.initialize(path)
+            with closing(sqlite3.connect(path)) as conn,patch.object(collector.logging,'info') as info:
+                collector.record_traffic(conn,dict(Icao_addr=124,Reg='N124AB',Lat=37,Lng=-122,Alt=10000,Speed=100),time.time())
+                self.assertTrue(info.called)
 
     def test_truncated_update_retains_cache(self):
         with tempfile.TemporaryDirectory() as tmp:

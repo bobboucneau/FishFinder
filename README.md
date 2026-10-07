@@ -1,4 +1,4 @@
-# FishFinder v0.3 — display, settings and connection recovery
+# FishFinder v0.3.1 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -35,7 +35,7 @@ The outer range circle now has a 398-pixel radius on an 800-pixel screen. Contro
 
 Setup offers Stratux IPv4 address, own tail number, default range (2/5/10/20 NM), vertical threshold (default 5,000 ft), vertical styling on/off, idle timeout (default 10 sec; zero disables), projection time (1–10 min), trail duration (30–300 sec), and airport visibility. Text fields open a touch keyboard. Save/Back validates and persists choices; Cancel/Back discards them. Restore defaults fills the form; Save applies those defaults. The collector picks up a changed IP automatically and reconnects. Own-tail filtering hides matching registration/callsign labels from this display; it does not change Stratux's ownship configuration or infer a new GPS location.
 
-After ten untouched seconds on the primary map, labels and buttons disappear, while symbols, trails, projections and circles remain. One touch wakes the controls and is consumed, so it cannot accidentally press Exit or select hidden controls. Setup and detail panels stay visible. Missing-ownship and receiver-unavailable notices remain visible even when idle.
+After ten untouched seconds on the primary map, buttons, headers and other interface text disappear. Aircraft labels, airport codes, range labels, symbols, trails, projections and circles remain. Airport names shorten to their code (for example O22). One touch wakes the controls and is consumed, so it cannot accidentally press Exit or select hidden controls. Setup and detail panels stay visible. Missing-ownship and receiver-unavailable notices remain visible even when idle.
 
 ## Hollow gray aircraft
 
@@ -47,7 +47,7 @@ Ownship altitude display now prefers GPSAltitudeMSL, falling back to the older G
 
 ## Stratux reachability
 
-The collector validates the /getSituation response before opening its traffic WebSocket. Network identity/SSID alone cannot establish that the correct receiver is reachable; the API response check does. With no receiver, it logs a transition to “Stratux not available. Waiting...” and retries every five seconds without repeated network tracebacks. The live display shows that message via the shared database. A reachable Stratux without a valid GPS fix is distinct from an unreachable receiver. Unexpected processing/database faults still produce diagnostic logs. Per-report logs are DEBUG to reduce ordinary output.
+The collector validates the /getSituation response before opening its traffic WebSocket. Network identity/SSID alone cannot establish that the correct receiver is reachable; the API response check does. With no receiver, it logs a transition to “Stratux not available. Waiting...” and retries every five seconds without repeated network tracebacks. The live display shows that message via the shared database. A reachable Stratux without a valid GPS fix is distinct from an unreachable receiver. Unexpected processing/database faults still produce diagnostic logs. Saved traffic reports and ownship reports are logged at INFO again. Unsaved traffic frames stay at DEBUG. Use --log-level DEBUG to include those frames, or --log-level WARNING for a quieter console.
 
 Both programs must be upgraded for connection status. An older collector cannot supply receiver_status; the display then says Waiting for collector. Existing reports expire normally. No automatic boot services are installed.
 
@@ -86,10 +86,18 @@ Network selection remains user initiated. After joining remembered internet Wi-F
 
 ## Verification
 
-Fourteen automated tests cover airport lookup and geometry, runway alignment, idle/wake touch behavior, expanded scope, settings validation/persistence, vertical closure and unknown-data handling, idempotent database migration, missing-altitude ownship, wrong-device API response, quiet disconnected retries and preservation on failed/truncated data updates. WebSocket is stubbed for collector database/probe tests if websocket-client is absent on the test host; no live traffic stream is opened. Preview images render Canvas drawing commands and are illustrative.
+Sixteen automated tests cover airport lookup and geometry, runway alignment, idle/wake touch behavior, expanded scope, settings validation/persistence, vertical closure and unknown-data handling, idempotent database migration, missing-altitude ownship, wrong-device API response, quiet disconnected retries, WebSocket keepalive/retry options and error diagnostics, INFO report logging, and preservation on failed/truncated data updates. WebSocket is stubbed for collector database/probe tests if websocket-client is absent on the test host; no live traffic stream is opened. Preview images render Canvas drawing commands and are illustrative.
 
 Actual Tk widgets, the touch keyboard, NetworkManager window, Stratux firmware field availability, fullscreen monitor placement, and Pi performance still require on-device testing. The airport snapshot remains the October 6 snapshot; this release does not refresh it automatically.
 
 Stratux field sources:
 https://github.com/cyoung/stratux/blob/master/main/traffic.go
 https://github.com/cyoung/stratux/blob/master/main/gps.go
+
+## v0.3.1 connection changes
+
+Client-generated WebSocket pings are disabled as a compatibility measure. v0.3 used a 30-second ping interval and a 10-second pong deadline; a late/missing pong could terminate that connection. This is a possible cause, not a diagnosis of the user's particular disconnect. TCP keepalive is enabled, using Linux idle/interval/count settings when supported. It detects broken links without treating a lack of aircraft reports as a failure. Local Stratux connections explicitly bypass proxy routing, and connection establishment has a five-second socket timeout.
+
+Unexpected disconnects retain and log the underlying error, server close code/message when present, or an explicit no-close-frame message. A connection that ran at least ten seconds starts retrying after one second; repeated short failures back off to two, four and at most five seconds. Receiver verification and socket establishment add their own bounded request time to that delay. Shutdown and an IP change are logged as intentional closures. Live stability remains to be tested on the Pi.
+
+References: https://websocket-client.readthedocs.io/en/latest/app.html and https://github.com/cyoung/stratux/blob/master/main/managementinterface.go

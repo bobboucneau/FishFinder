@@ -5,6 +5,8 @@ Requires websocket-client. Existing table/column names are preserved.
 Do not run the old collector/OwnShip.py alongside this replacement.
 """
 
+import argparse
+import socket
 import json
 import logging
 import math
@@ -142,8 +144,9 @@ def record_traffic(conn, data, received_at=None):
                 (tail, timestamp, speed, altitude, lng, lat,
                  altitude if data.get('AltIsGNSS') is False and number(data.get('AgeLastAlt')) is not None and 0 <= number(data.get('AgeLastAlt')) <= 10 else None,
                  'pressure' if data.get('AltIsGNSS') is False else None))
-    logging.debug('Traffic %s | altitude=%s speed=%s position=(%s, %s) saved=%s',
-                 tail, altitude, speed, lat, lng, report_ok)
+    log = logging.info if report_ok else logging.debug
+    log('Traffic %s | altitude=%s speed=%s position=(%s, %s) saved=%s',
+        tail, altitude, speed, lat, lng, report_ok)
     return report_ok
 
 
@@ -171,7 +174,7 @@ def record_ownship(conn, data, received_at=None):
         conn.execute('''INSERT INTO ownship (time, speed, asl, longitude, latitude, comparison_alt, alt_ref)
             VALUES (?, ?, ?, ?, ?, ?, ?)''', (timestamp, speed, altitude, lng, lat,
             number(data.get('BaroPressureAltitude')) if timestamp_fresh(data.get('BaroLastMeasurementTime'), timestamp) else None, 'pressure'))
-    logging.debug('Ownship | altitude=%s speed=%s position=(%s, %s)', altitude, speed, lat, lng)
+    logging.info('Ownship | altitude=%s speed=%s position=(%s, %s)', altitude, speed, lat, lng)
     return True
 
 
@@ -249,56 +252,80 @@ def ownship_loop(stop, db_path=DATABASE_PATH):
             stop.wait(max(0.1, RECONNECT_DELAY if not available else OWNSHIP_INTERVAL - (time.monotonic()-started)))
 
 
+def traffic_socket_options():
+    """OS keepalive detects a broken link without application ping deadlines."""
+    options=[(socket.SOL_SOCKET,socket.SO_KEEPALIVE,1)]
+    for name,value in [('TCP_KEEPIDLE',10),('TCP_KEEPINTVL',3),('TCP_KEEPCNT',3)]:
+        if hasattr(socket,name): options.append((socket.IPPROTO_TCP,getattr(socket,name),value))
+    return options
+
+
+def traffic_retry_delay(failures):
+    return min(RECONNECT_DELAY, 2 ** min(max(0,failures-1),3))
+
+
 def traffic_loop(stop, db_path=DATABASE_PATH):
+    failures=0
     with closing(connect_database(db_path)) as conn:
         def on_message(ws, message):
-            if stop.is_set():
-                return
-            try:
-                record_traffic(conn, json.loads(message))
-            except Exception:
-                logging.exception('Traffic message could not be saved')
+            if stop.is_set(): return
+            try: record_traffic(conn, json.loads(message))
+            except Exception: logging.exception('Traffic message could not be saved')
 
         while not stop.is_set():
             try:
                 fetch_situation()
                 address=settings.load()['stratux_ip']
             except (OSError, ValueError, TimeoutError):
-                stop.wait(RECONNECT_DELAY); continue
-            ws = websocket.WebSocketApp(
-                'ws://' + address + '/traffic',
-                on_message=on_message,
-                on_open=lambda ws: logging.info('Connected to Stratux traffic'),
-                on_error=lambda ws, error: logging.debug('Traffic WebSocket error: %s', error),
-                on_close=lambda ws, code, msg: logging.info('Traffic closed: %s %s', code, msg),
-            )
-            # Close a blocked WebSocket when shutdown is requested. The watcher
-            # exits after this connection ends so reconnects do not leak threads.
-            connection_finished = threading.Event()
-
+                failures+=1
+                stop.wait(traffic_retry_delay(failures)); continue
+            state=dict(error='',opened=None,local_reason='',code=None,message='')
+            def on_open(ws):
+                state['opened']=time.monotonic()
+                logging.info('Connected to Stratux traffic at %s',address)
+            def on_error(ws,error):
+                state['error']=f'{type(error).__name__}: {error}'
+            def on_close(ws,code,message):
+                state['code']=code;state['message']=message or ''
+            ws=websocket.WebSocketApp('ws://'+address+'/traffic',on_message=on_message,
+                                     on_open=on_open,on_error=on_error,on_close=on_close)
+            connection_finished=threading.Event()
             def close_on_stop():
                 while not connection_finished.wait(0.2):
-                    if stop.is_set() or settings.load()['stratux_ip'] != address:
-                        ws.close()
-                        return
-
-            watcher = threading.Thread(target=close_on_stop, name='traffic-stop', daemon=True)
+                    if stop.is_set(): state['local_reason']='shutdown'
+                    elif settings.load()['stratux_ip'] != address: state['local_reason']='receiver IP changed'
+                    else: continue
+                    ws.close(); return
+            watcher=threading.Thread(target=close_on_stop,name='traffic-stop',daemon=True)
             watcher.start()
             try:
-                ws.run_forever(ping_interval=30, ping_timeout=10)
-            except Exception:
-                logging.debug('Traffic connection failed; will retry', exc_info=True)
+                # Avoid a client ping timeout closing an otherwise usable stream.
+                ws.run_forever(ping_interval=0,sockopt=traffic_socket_options(),http_no_proxy=[address])
+            except Exception as exc:
+                state['error']=f'{type(exc).__name__}: {exc}'
             finally:
-                connection_finished.set()
-                watcher.join()
-                ws.close()
-            stop.wait(RECONNECT_DELAY)
+                connection_finished.set(); watcher.join(); ws.close()
+            if stop.is_set():
+                logging.info('Traffic connection closed for shutdown'); break
+            if state['local_reason']:
+                logging.info('Traffic connection closed: %s',state['local_reason'])
+                failures=0; continue
+            uptime=None if state['opened'] is None else time.monotonic()-state['opened']
+            failures=1 if uptime is not None and uptime>=10 else failures+1
+            delay=traffic_retry_delay(failures)
+            reason=state['error'] or (f"server close {state['code']}: {state['message']}" if state['code'] is not None else 'connection ended without a close frame')
+            logging.warning('Traffic disconnected (%s); retry in %s seconds',reason,delay)
+            stop.wait(delay)
 
 
 def main():
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(threadName)s %(levelname)s %(message)s')
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--log-level',choices=('DEBUG','INFO','WARNING','ERROR'),default='INFO')
+    args=parser.parse_args()
+    logging.basicConfig(level=getattr(logging,args.log_level), format='%(asctime)s %(threadName)s %(levelname)s %(message)s')
     settings.load()  # Fail clearly on invalid configuration before starting workers.
     logging.getLogger('websocket').setLevel(logging.CRITICAL)
+    websocket.setdefaulttimeout(HTTP_TIMEOUT)
     initialize()
     logging.info('Using database %s', DATABASE_PATH)
     stop = threading.Event()

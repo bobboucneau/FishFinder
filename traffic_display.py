@@ -369,7 +369,7 @@ class Display:
         for fraction in (0.25,0.5,0.75,1):
             r=radius*fraction
             c.create_oval(self.cx-r,self.cy-r,self.cx+r,self.cy+r,outline='#285449',width=1)
-            if not self.idle: self.text(580 if fraction in (0.5,0.75) else 426,400-398*fraction+13,f'{self.radius_nm*fraction:g} NM',fill=MUTED,size=9,anchor='w')
+            self.text(580 if fraction in (0.5,0.75) else 426,400-398*fraction+13,f'{self.radius_nm*fraction:g} NM',fill=MUTED,size=9,anchor='w')
         c.create_line(self.cx-radius,self.cy,self.cx+radius,self.cy,fill='#112921')
         c.create_line(self.cx,self.cy-radius,self.cx,self.cy+radius,fill='#112921')
         if not self.idle: self.text(400,143,'N',fill=GREEN,size=11)
@@ -406,8 +406,8 @@ class Display:
                 boxes.extend([(left,ty-20*self.unit,left+tw,ty),(tx-10*self.unit,ty-10*self.unit,tx+10*self.unit,ty+10*self.unit)])
             for x,y,ident in self.airport_hits:
                 airport=self.catalog.airports[ident]
-                label=airport['code']+' · '+airport['name'][:18]
-                if len(airport['name'])>18: label+='…'
+                label=airport['code'] if self.idle else airport['code']+' · '+airport['name'][:18]
+                if not self.idle and len(airport['name'])>18: label+='…'
                 width=len(label)*5.3*self.unit
                 side=-1 if x>=self.cx else 1
                 left=x-10*self.unit-width if side<0 else x+10*self.unit
@@ -415,7 +415,7 @@ class Display:
                 corners=[(box[a],box[b]) for a in (0,2) for b in (1,3)]
                 if any(math.hypot(px-self.cx,py-self.cy)>radius-5*self.unit for px,py in corners): continue
                 if any(box[0]<b[2] and box[2]>b[0] and box[1]<b[3] and box[3]>b[1] for b in boxes): continue
-                if not self.idle: c.create_text(left,top,text=label,anchor='nw',fill=BLUE,font=('DejaVu Sans',max(9,int(9*self.unit))),tags='map-label')
+                c.create_text(left,top,text=label,anchor='nw',fill=BLUE,font=('DejaVu Sans',max(9,int(9*self.unit))),tags='map-label')
                 boxes.append(box)
         if origin:
             if fix:
@@ -459,7 +459,7 @@ class Display:
                 label=(snap.labels or {}).get(tail,tail)+(' · OLD' if age>10 else '')
                 # Keep the label inside the scope even near its perimeter.
                 side=-1 if pos[0]>=0 else 1
-                if not self.idle: c.create_text(x+side*12*self.unit,y-10*self.unit,text=label,anchor='e' if side<0 else 'w',
+                c.create_text(x+side*12*self.unit,y-10*self.unit,text=label,anchor='e' if side<0 else 'w',
                     fill=color,font=('DejaVu Sans',max(9,int(10*self.unit))),tags='map-label')
                 self.hits.append((x,y,tail))
         overlay_start=len(c.find_all())
@@ -499,7 +499,6 @@ class Display:
         if self.idle:
             # Main overlay controls are drawn last. Remove them without affecting map graphics.
             for item in c.find_all()[overlay_start:]: c.delete(item)
-            c.delete('map-label')
             self.buttons=[]
         if self.idle and not fix:
             self.text(400,96,'NO OWN GPS · reference center',fill=YELLOW,size=12)
