@@ -1,0 +1,328 @@
+#!/usr/local/Fishfinder/.venv/bin/python3
+"""Collect Stratux traffic and ownship; periodically prune the shared database.
+
+Requires websocket-client. Existing table/column names are preserved.
+Do not run the old collector/OwnShip.py alongside this replacement.
+"""
+
+import json
+import logging
+import math
+import sqlite3
+import threading
+import time
+import urllib.request
+from contextlib import closing
+from pathlib import Path
+from datetime import datetime, timezone
+import settings
+
+import websocket
+
+DATABASE_PATH = Path('/var/local/FishFinder/flying_objects.db')
+TRAFFIC_URL = 'ws://192.168.10.1/traffic'
+SITUATION_URL = 'http://192.168.10.1/getSituation'
+OWNSHIP_INTERVAL = 3
+CLEANUP_INTERVAL = 3
+OWNSHIP_HISTORY = 110  # About 5.5 minutes at a three-second poll interval.
+AIRCRAFT_AGE = 60
+HISTORY_SECONDS = 300
+REPORT_HISTORY = 600  # Safety cap per tail; normal sampling yields about 300.
+REPORT_INTERVAL = 1.0
+HTTP_TIMEOUT = 5
+RECONNECT_DELAY = 5
+
+
+def connect_database(db_path=DATABASE_PATH):
+    # Each calling thread owns its connection. Wait briefly for other writers.
+    return sqlite3.connect(str(db_path), timeout=10)
+
+
+def initialize(db_path=DATABASE_PATH):
+    if sqlite3.sqlite_version_info < (3, 25, 0):
+        raise RuntimeError('SQLite 3.25 or newer is required for history cleanup')
+    # Require the directory to exist: do not silently create a wrong location.
+    if not Path(db_path).parent.is_dir():
+        raise RuntimeError(f'Database directory does not exist: {Path(db_path).parent}')
+    with closing(connect_database(db_path)) as conn:
+        conn.execute('PRAGMA journal_mode=WAL')
+        with conn:
+            conn.execute('CREATE TABLE IF NOT EXISTS aircraft (tail TEXT PRIMARY KEY, time REAL)')
+            conn.execute('''CREATE TABLE IF NOT EXISTS reports (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, tail TEXT, time REAL,
+                speed REAL, asl REAL, longitude REAL, latitude REAL)''')
+            conn.execute('''CREATE TABLE IF NOT EXISTS ownship (
+                id INTEGER PRIMARY KEY AUTOINCREMENT, time REAL,
+                speed REAL, asl REAL, longitude REAL, latitude REAL)''')
+            columns = {row[1] for row in conn.execute('PRAGMA table_info(aircraft)')}
+            for name in ('registration', 'callsign'):
+                if name not in columns:
+                    conn.execute(f'ALTER TABLE aircraft ADD COLUMN {name} TEXT')
+            for table in ('reports', 'ownship'):
+                columns = {row[1] for row in conn.execute(f'PRAGMA table_info({table})')}
+                for name, kind in [('comparison_alt','REAL'),('alt_ref','TEXT')]:
+                    if name not in columns: conn.execute(f'ALTER TABLE {table} ADD COLUMN {name} {kind}')
+            conn.execute('CREATE TABLE IF NOT EXISTS receiver_status (id INTEGER PRIMARY KEY CHECK(id=1), time REAL, available INTEGER, message TEXT)')
+            conn.execute('CREATE INDEX IF NOT EXISTS aircraft_time_idx ON aircraft(time)')
+            conn.execute('CREATE INDEX IF NOT EXISTS reports_time_idx ON reports(time)')
+            conn.execute('CREATE INDEX IF NOT EXISTS reports_tail_time_idx ON reports(tail, time DESC, id DESC)')
+
+
+def number(value):
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else None
+    except (ValueError, TypeError, OverflowError):
+        return None
+
+
+def valid_position(lat, lng):
+    return (lat is not None and lng is not None
+            and -90 <= lat <= 90 and -180 <= lng <= 180)
+
+
+def identity(data):
+    def label(value):
+        return value.strip().upper() if isinstance(value, str) and value.strip().upper() != 'NO TAIL' else ''
+    registration, callsign = label(data.get('Reg')), label(data.get('Tail'))
+    address = data.get('Icao_addr')
+    if isinstance(address, str):
+        try:
+            text = address.strip()
+            address = int(text, 16 if text.lower().startswith('0x') or any(c in text.upper() for c in 'ABCDEF') else 10)
+        except ValueError:
+            address = None
+    if isinstance(address, int) and not isinstance(address, bool) and 0 < address <= 0xFFFFFF:
+        return f'icao:{address:06X}', registration, callsign
+    if registration:
+        return 'reg:' + registration, registration, callsign
+    if callsign:
+        return 'label:' + callsign, registration, callsign
+    return None, registration, callsign
+
+
+def record_traffic(conn, data, received_at=None):
+    if not isinstance(data, dict):
+        raise ValueError('Traffic message must be a JSON object')
+    tail, registration, callsign = identity(data)
+    if tail is None:
+        return False
+    timestamp = time.time() if received_at is None else received_at
+    lat, lng = number(data.get('Lat')), number(data.get('Lng'))
+    altitude, speed = number(data.get('Alt')), number(data.get('Speed'))
+    # Explicit validity flags take precedence; older feeds may omit them.
+    position_age=number(data.get('Age'))
+    position_ok = data.get('Position_valid', True) is True and valid_position(lat, lng) and (position_age is None or 0 <= position_age <= 10)
+    speed_ok = data.get('Speed_valid', True) is True and speed is not None and speed >= 0
+    report_ok = position_ok and speed_ok and altitude is not None
+    with conn:
+        conn.execute('INSERT OR IGNORE INTO aircraft (tail) VALUES (?)', (tail,))
+        conn.execute('''UPDATE aircraft SET time = ?,
+            registration = COALESCE(NULLIF(?, ''), registration),
+            callsign = CASE WHEN ? = '' THEN callsign
+                WHEN ? = COALESCE(NULLIF(?, ''), registration) AND callsign IS NOT NULL
+                    THEN callsign ELSE ? END
+            WHERE tail = ?''',
+            (timestamp, registration, callsign, callsign, registration, callsign, tail))
+        if report_ok:
+            previous = conn.execute(
+                'SELECT time FROM reports WHERE tail = ? ORDER BY time DESC, id DESC LIMIT 1',
+                (tail,),
+            ).fetchone()
+            # Keep one position per second per aircraft, rather than every frame.
+            # Resume immediately if the system clock has moved backwards.
+            previous_time = number(previous[0]) if previous else None
+            report_ok = (previous_time is None or timestamp < previous_time
+                         or timestamp - previous_time >= REPORT_INTERVAL)
+        if report_ok:
+            conn.execute('''INSERT INTO reports
+                (tail, time, speed, asl, longitude, latitude, comparison_alt, alt_ref) VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (tail, timestamp, speed, altitude, lng, lat,
+                 altitude if data.get('AltIsGNSS') is False and number(data.get('AgeLastAlt')) is not None and 0 <= number(data.get('AgeLastAlt')) <= 10 else None,
+                 'pressure' if data.get('AltIsGNSS') is False else None))
+    logging.debug('Traffic %s | altitude=%s speed=%s position=(%s, %s) saved=%s',
+                 tail, altitude, speed, lat, lng, report_ok)
+    return report_ok
+
+
+def record_ownship(conn, data, received_at=None):
+    if not isinstance(data, dict):
+        raise ValueError('Situation response must be a JSON object')
+    timestamp = time.time() if received_at is None else received_at
+    if 'GPSLastFixLocalTime' in data and not timestamp_fresh(data['GPSLastFixLocalTime'],timestamp):
+        return False
+    # Skip an explicitly reported lack of GPS fix.
+    if 'GPSFixQuality' in data:
+        quality = number(data['GPSFixQuality'])
+        if quality is None or quality <= 0:
+            return False
+    lat = number(data.get('GPSLatitude'))
+    lng = number(data.get('GPSLongitude'))
+    altitude = number(data.get('GPSAltitudeMSL'))
+    if altitude is None: altitude = number(data.get('GPSAltitude'))
+    speed = number(data.get('GPSGroundSpeed'))
+    if not valid_position(lat, lng) or speed is None or speed < 0:
+        logging.debug('Skipping ownship: missing or invalid GPS fields')
+        return False
+    timestamp = time.time() if received_at is None else received_at
+    with conn:
+        conn.execute('''INSERT INTO ownship (time, speed, asl, longitude, latitude, comparison_alt, alt_ref)
+            VALUES (?, ?, ?, ?, ?, ?, ?)''', (timestamp, speed, altitude, lng, lat,
+            number(data.get('BaroPressureAltitude')) if timestamp_fresh(data.get('BaroLastMeasurementTime'), timestamp) else None, 'pressure'))
+    logging.debug('Ownship | altitude=%s speed=%s position=(%s, %s)', altitude, speed, lat, lng)
+    return True
+
+
+def cleanup_once(conn, now=None):
+    timestamp = time.time() if now is None else now
+    cutoff = timestamp - AIRCRAFT_AGE
+    history_cutoff = timestamp - HISTORY_SECONDS
+    with conn:
+        conn.execute('DELETE FROM ownship WHERE time < ? OR time IS NULL', (history_cutoff,))
+        conn.execute('''DELETE FROM ownship WHERE id NOT IN
+            (SELECT id FROM ownship ORDER BY id DESC LIMIT ?)''', (OWNSHIP_HISTORY,))
+        conn.execute('DELETE FROM aircraft WHERE time < ? OR time IS NULL', (cutoff,))
+        conn.execute('DELETE FROM reports WHERE time < ? OR time IS NULL', (history_cutoff,))
+        # Window functions avoid repeatedly counting the expanded history.
+        # Supported by SQLite 3.25+ (standard on modern Debian).
+        conn.execute('''DELETE FROM reports WHERE id NOT IN (
+            SELECT id FROM (
+                SELECT id, ROW_NUMBER() OVER (
+                    PARTITION BY tail ORDER BY time DESC, id DESC
+                ) AS position_rank FROM reports
+            ) WHERE position_rank <= ?
+        )''', (REPORT_HISTORY,))
+
+
+def cleanup_loop(stop, db_path=DATABASE_PATH):
+    with closing(connect_database(db_path)) as conn:
+        while not stop.is_set():
+            try:
+                cleanup_once(conn)
+            except Exception:
+                logging.exception('Cleanup failed; will retry')
+            # Pause after each run, independently of report-history settings.
+            stop.wait(CLEANUP_INTERVAL)
+
+
+def timestamp_fresh(value, now):
+    try:
+        stamp=datetime.fromisoformat(str(value).replace('Z','+00:00')).timestamp()
+        return 0 <= now-stamp <= 10
+    except (ValueError, TypeError, OverflowError):
+        return False
+
+
+def receiver_url(path):
+    return 'http://' + settings.load()['stratux_ip'] + path
+
+
+def fetch_situation():
+    with urllib.request.urlopen(receiver_url('/getSituation'), timeout=HTTP_TIMEOUT) as response:
+        data=json.load(response)
+    if not isinstance(data,dict) or not {'GPSLatitude','GPSLongitude','GPSFixQuality'} <= data.keys():
+        raise ValueError('Device did not return a Stratux situation response')
+    return data
+
+
+def ownship_loop(stop, db_path=DATABASE_PATH):
+    previous=None
+    with closing(connect_database(db_path)) as conn:
+        while not stop.is_set():
+            started = time.monotonic()
+            try:
+                data=fetch_situation()
+                record_ownship(conn, data)
+                available=True; message='Stratux connected'
+            except (OSError, ValueError, TimeoutError) as exc:
+                available=False; message='Stratux not available. Waiting...'
+                logging.debug('Receiver poll: %s', exc)
+            except Exception:
+                available=False; message='Collector error: check log'
+                logging.exception('Ownship processing failed')
+            with conn:
+                conn.execute('INSERT OR REPLACE INTO receiver_status VALUES (1,?,?,?)', (time.time(),int(available),message))
+            if previous != (available,message):
+                logging.info(message); previous=(available,message)
+            stop.wait(max(0.1, RECONNECT_DELAY if not available else OWNSHIP_INTERVAL - (time.monotonic()-started)))
+
+
+def traffic_loop(stop, db_path=DATABASE_PATH):
+    with closing(connect_database(db_path)) as conn:
+        def on_message(ws, message):
+            if stop.is_set():
+                return
+            try:
+                record_traffic(conn, json.loads(message))
+            except Exception:
+                logging.exception('Traffic message could not be saved')
+
+        while not stop.is_set():
+            try:
+                fetch_situation()
+                address=settings.load()['stratux_ip']
+            except (OSError, ValueError, TimeoutError):
+                stop.wait(RECONNECT_DELAY); continue
+            ws = websocket.WebSocketApp(
+                'ws://' + address + '/traffic',
+                on_message=on_message,
+                on_open=lambda ws: logging.info('Connected to Stratux traffic'),
+                on_error=lambda ws, error: logging.debug('Traffic WebSocket error: %s', error),
+                on_close=lambda ws, code, msg: logging.info('Traffic closed: %s %s', code, msg),
+            )
+            # Close a blocked WebSocket when shutdown is requested. The watcher
+            # exits after this connection ends so reconnects do not leak threads.
+            connection_finished = threading.Event()
+
+            def close_on_stop():
+                while not connection_finished.wait(0.2):
+                    if stop.is_set() or settings.load()['stratux_ip'] != address:
+                        ws.close()
+                        return
+
+            watcher = threading.Thread(target=close_on_stop, name='traffic-stop', daemon=True)
+            watcher.start()
+            try:
+                ws.run_forever(ping_interval=30, ping_timeout=10)
+            except Exception:
+                logging.debug('Traffic connection failed; will retry', exc_info=True)
+            finally:
+                connection_finished.set()
+                watcher.join()
+                ws.close()
+            stop.wait(RECONNECT_DELAY)
+
+
+def main():
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s %(threadName)s %(levelname)s %(message)s')
+    settings.load()  # Fail clearly on invalid configuration before starting workers.
+    logging.getLogger('websocket').setLevel(logging.CRITICAL)
+    initialize()
+    logging.info('Using database %s', DATABASE_PATH)
+    stop = threading.Event()
+    workers = [
+        threading.Thread(target=ownship_loop, args=(stop,), name='ownship'),
+        threading.Thread(target=cleanup_loop, args=(stop,), name='cleanup'),
+        threading.Thread(target=traffic_loop, args=(stop,), name='traffic'),
+    ]
+    try:
+        for worker in workers:
+            worker.start()
+        while not stop.wait(1):
+            if any(not worker.is_alive() for worker in workers):
+                logging.error('A worker stopped unexpectedly; shutting down')
+                break
+    except KeyboardInterrupt:
+        logging.info('Shutdown requested')
+    finally:
+        stop.set()
+        for worker in workers:
+            if worker.ident is not None:
+                worker.join()
+        logging.info('All workers stopped; database connections closed')
+
+
+if __name__ == '__main__':
+    main()

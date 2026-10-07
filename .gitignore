@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.venv/
+settings.json
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
