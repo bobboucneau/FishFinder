@@ -97,12 +97,61 @@ class Setup:
         self.display.last_touch=time.monotonic();self.display.draw()
 
     def network(self):
-        command=shutil.which('nm-connection-editor')
+        command=shutil.which('nmcli')
         if not command:
-            self.status.set('Use the desktop Wi-Fi menu to join and remember your internet network. For this button, install nm-connection-editor on the Pi.');return
-        try:subprocess.Popen([command],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-        except OSError as exc:self.status.set(f'Cannot open network settings: {exc}')
-        else:self.status.set('Network settings opened. Save an internet Wi-Fi profile there; return here to update. Rejoin Stratux Wi-Fi afterwards.')
+            self.status.set('NetworkManager nmcli is required to activate a saved Wi-Fi network.');return
+        panel=tk.Frame(self.frame,bg=BG,highlightbackground=FG,highlightthickness=1)
+        panel.place(relx=.5,rely=.5,anchor='center',relwidth=.96,relheight=.85)
+        tk.Label(panel,text='Saved Wi-Fi networks',bg=BG,fg=FG,font=('DejaVu Sans',16)).pack(pady=10)
+        message=tk.StringVar(value='Loading saved networks…')
+        choices=tk.Listbox(panel,font=('DejaVu Sans',13),height=7,exportselection=False)
+        choices.pack(fill='both',expand=True,padx=14,pady=8)
+        tk.Label(panel,textvariable=message,bg=BG,fg='#ffd45c',wraplength=420).pack(pady=8)
+        results=queue.Queue();profiles=[]
+        actions=tk.Frame(panel,bg=BG);actions.pack(pady=8)
+        def task(args,kind):
+            def work():
+                try:
+                    result=subprocess.run([command,*args],capture_output=True,text=True,timeout=45)
+                    results.put((kind,result.returncode,result.stdout,result.stderr))
+                except (OSError,subprocess.TimeoutExpired) as exc:results.put((kind,1,'',str(exc)))
+            threading.Thread(target=work,daemon=True,name='wifi-connect').start()
+        def load():
+            connect.configure(state='disabled');message.set('Loading saved networks…')
+            task(['-t','--escape','no','-f','UUID,TYPE,NAME','connection','show'],'list')
+        def activate():
+            selection=choices.curselection()
+            if not selection:message.set('Tap a saved network first.');return
+            uuid,name=profiles[selection[0]]
+            connect.configure(state='disabled');message.set(f'Connecting to {name}…')
+            task(['--wait','30','connection','up','uuid',uuid],'connect')
+        def editor():
+            app=shutil.which('nm-connection-editor')
+            if not app:message.set('Use the desktop Wi-Fi menu to add a new network.');return
+            try:subprocess.Popen([app],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+            except OSError as exc:message.set(str(exc));return
+            message.set('Save the profile in the editor, close it, then tap Refresh and Connect here.')
+        connect=self.button(actions,'Connect',activate);connect.pack(side='left',padx=3)
+        self.button(actions,'Refresh',load).pack(side='left',padx=3)
+        self.button(panel,'Add / edit network',editor).pack(pady=3)
+        self.button(panel,'Back',panel.destroy).pack(pady=8)
+        def poll_network():
+            if self.closed or not panel.winfo_exists():return
+            try:
+                kind,code,out,err=results.get_nowait()
+                if kind=='list':
+                    profiles.clear();choices.delete(0,'end')
+                    for line in out.splitlines():
+                        parts=line.split(':',2)
+                        if len(parts)==3 and parts[1] in ('802-11-wireless','wifi'):
+                            profiles.append((parts[0],parts[2]));choices.insert('end',parts[2])
+                    message.set((err.strip() or 'Cannot list networks.') if code else 'Tap a network, then Connect.' if profiles else 'No saved Wi-Fi profiles. Add a network first.')
+                else:
+                    message.set(('Connection failed: '+(err.strip() or out.strip())) if code else 'Connected. Tap Back to return to setup.')
+                connect.configure(state='normal' if profiles else 'disabled')
+            except queue.Empty:pass
+            panel.after(250,poll_network)
+        load();poll_network()
 
     def code_updates(self):
         self.status.set('No code release server is configured yet. Recommended: versioned GitHub Releases with verified downloads and rollback. This button will not install unverified code.')

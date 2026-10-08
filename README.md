@@ -1,4 +1,4 @@
-# FishFinder v0.3.5 — display, settings and connection recovery
+# FishFinder v0.3.6 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -121,3 +121,7 @@ Every traffic log now includes reason=accepted or one or more rejection reasons 
 ### v0.3.5 estimated traffic
 
 Install both FishFinder.py and traffic_display.py together. The collector migrates existing databases automatically. Valid Stratux extrapolations are saved at the normal one-second interval while position Age is at most 60 seconds; ordinary positions retain the 10-second limit. Invalid position/speed flags still reject reports. Estimated trail segments and projections are dashed purple, and aircraft labels show EST; symbols retain conflict colors. Estimated altitude never establishes vertical clearance. No extrapolation is invented when Stratux stops sending data. Existing rows default to observed. Twenty automated tests pass; Raspberry Pi display testing remains required.
+
+### v0.3.6 Wi-Fi activation
+
+Setup → Wi-Fi / Internet now lists saved Wi-Fi profiles. Tap a profile, then Connect to activate it; status reports success or failure. NetworkManager nmcli must be installed and the desktop user must have permission to activate connections. Add / edit network opens the profile editor; after saving, return and tap Refresh, then Connect. Saved credentials remain with NetworkManager. Connection work runs outside the GUI thread. Twenty existing tests and Python compilation pass; actual switching requires Pi testing.
