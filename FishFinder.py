@@ -387,22 +387,31 @@ def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--log-level',choices=('DEBUG','INFO','WARNING','ERROR'),default='INFO')
     parser.add_argument('--traffic-idle-seconds',type=float,default=0,help='Optional: refresh a formerly active but quiet traffic stream; 0 disables')
+    parser.add_argument('--demo',action='store_true',help='Offline airport-pattern simulation; uses a separate demo database')
+    parser.add_argument('--demo-seed',type=int,default=22,help='Repeatable random seed for demo traffic')
+    parser.add_argument('--db',type=Path,default=None,help='Database override (must have an existing parent directory)')
     args=parser.parse_args()
     if not math.isfinite(args.traffic_idle_seconds) or args.traffic_idle_seconds<0: parser.error('Traffic idle timeout must be a finite nonnegative number')
-    global TRAFFIC_IDLE_SECONDS
+    global TRAFFIC_IDLE_SECONDS, DATABASE_PATH
     TRAFFIC_IDLE_SECONDS=args.traffic_idle_seconds
+    DATABASE_PATH=args.db or (DATABASE_PATH.with_name("demo_objects.db") if args.demo else DATABASE_PATH)
     logging.basicConfig(level=getattr(logging,args.log_level), format='%(asctime)s %(threadName)s %(levelname)s %(message)s')
     settings.load()  # Fail clearly on invalid configuration before starting workers.
     logging.getLogger('websocket').setLevel(logging.CRITICAL)
     websocket.setdefaulttimeout(HTTP_TIMEOUT)
-    initialize()
+    initialize(DATABASE_PATH)
     logging.info('Using database %s', DATABASE_PATH)
     stop = threading.Event()
-    workers = [
-        threading.Thread(target=ownship_loop, args=(stop,), name='ownship'),
-        threading.Thread(target=cleanup_loop, args=(stop,), name='cleanup'),
-        threading.Thread(target=traffic_loop, args=(stop,), name='traffic'),
-    ]
+    if args.demo:
+        from demo_traffic import run as demo_loop
+        workers=[threading.Thread(target=demo_loop,args=(stop,DATABASE_PATH,args.demo_seed),name="demo"),
+                 threading.Thread(target=cleanup_loop,args=(stop,DATABASE_PATH),name="cleanup")]
+    else:
+        workers = [
+            threading.Thread(target=ownship_loop, args=(stop,DATABASE_PATH), name='ownship'),
+            threading.Thread(target=cleanup_loop, args=(stop,DATABASE_PATH), name='cleanup'),
+            threading.Thread(target=traffic_loop, args=(stop,DATABASE_PATH), name='traffic'),
+        ]
     try:
         for worker in workers:
             worker.start()

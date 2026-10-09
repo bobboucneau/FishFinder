@@ -269,6 +269,27 @@ def clip_segment(a, b, radius):
     return ((a[0]+dx*low,a[1]+dy*low),(a[0]+dx*high,a[1]+dy*high))
 
 
+def draw_splash(canvas,width,height):
+    """Canvas artwork stays sharp on the round display without image dependencies."""
+    canvas.delete('all');u=min(width,height)/800;cx=width/2;cy=height/2
+    def point(x,y):return cx+(x-400)*u,cy+(y-400)*u
+    for i in range(80):
+        fraction=i/79
+        color='#%02x%02x%02x'%(int(5+8*fraction),int(19+32*fraction),int(38+31*fraction))
+        canvas.create_rectangle(0,height*i/80,width,height*(i+1)/80+1,fill=color,outline='')
+    for radius,color in [(285,'#204550'),(220,'#275962'),(150,'#337078')]:
+        x,y=point(400,370);r=radius*u
+        canvas.create_oval(x-r,y-r,x+r,y+r,outline=color,width=2*u)
+    # Quiet Sierra silhouettes, framed safely inside the circular screen.
+    for vertices,color in [([(100,480),(225,340),(310,425),(405,300),(530,435),(635,365),(710,490)],'#183747'),
+                           ([(105,505),(255,420),(350,475),(475,395),(620,475),(695,520)],'#24535b')]:
+        canvas.create_polygon(*[n for x,y in vertices for n in point(x,y)],fill=color,outline='')
+    canvas.create_line(*point(310,315),*point(400,275),*point(490,315),fill='#83d8ca',width=3*u)
+    canvas.create_polygon(*[n for x,y in [(400,242),(413,280),(400,272),(387,280)] for n in point(x,y)],fill='#f3d3a0',outline='')
+    for y,text,size,color in [(540,'FISHFINDER',30,'#ebf7f1'),(583,'A little perspective on the sky',13,'#9ed4cd'),(645,'Touch to begin',10,'#8daeb5')]:
+        canvas.create_text(*point(400,y),text=text,fill=color,font=('DejaVu Sans',max(9,int(size*u))))
+
+
 class Display:
     def __init__(self, root, args):
         self.root, self.args = root, args
@@ -305,6 +326,7 @@ class Display:
         if not args.demo:
             self.worker=threading.Thread(target=reader,args=(self.stop,self.out,args.db),daemon=True,name='database-reader')
             self.worker.start()
+        self.splash_until=time.monotonic()+getattr(args,"splash_seconds",0)
         self.tick()
 
     def close(self):
@@ -334,7 +356,9 @@ class Display:
                 self.snapshot=self.out.get_nowait()
             except queue.Empty:
                 pass
-        self.draw()
+        if time.monotonic()<self.splash_until:
+            draw_splash(self.canvas,self.canvas.winfo_width(),self.canvas.winfo_height())
+        else:self.draw()
         self.root.after(FRAME_MS,self.tick)
 
     def draw(self):
@@ -473,7 +497,7 @@ class Display:
                 self.hits.append((x,y,tail))
         overlay_start=len(c.find_all())
         self.rect(215,50,585,131,fill=BG,outline='')
-        self.text(400,68,'FISHFINDER'+(' · DEMO' if snap.demo else ''),size=17)
+        self.text(400,68,'FISHFINDER'+(' · DEMO' if snap.demo or (snap.receiver and snap.receiver[2].startswith('DEMO:')) else ''),size=17)
         self.text(400,96,mode,fill=WHITE if fix else YELLOW,size=12)
         self.text(400,119,f'{self.config["horizon_minutes"]} min · purple dashed = estimated · gray = distant',fill=MUTED,size=10)
         self.rect(318,158,482,185,fill='#10253d',outline=BLUE)
@@ -664,6 +688,8 @@ class Display:
         self.last_touch=time.monotonic(); self.draw()
 
     def tap(self,event):
+        if time.monotonic()<self.splash_until:
+            self.splash_until=0;self.last_touch=time.monotonic();self.draw();return
         self.last_touch=time.monotonic()
         if self.idle:
             self.idle=False; self.draw(); return  # Wake touch must not activate a hidden control.
@@ -709,7 +735,9 @@ def main():
     parser.add_argument('--demo',action='store_true')
     parser.add_argument('--no-ownship',action='store_true',help='Demo without an ownship fix')
     parser.add_argument('--range',type=int,choices=(2,5,10,20),default=None)
+    parser.add_argument('--splash-seconds',type=float,default=3,help='Startup splash duration; 0 disables, tap dismisses')
     args=parser.parse_args()
+    if not math.isfinite(args.splash_seconds) or args.splash_seconds<0:parser.error('Splash duration must be finite and nonnegative')
     root=tk.Tk();Display(root,args);root.mainloop()
 
 
