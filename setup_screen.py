@@ -16,23 +16,23 @@ class Setup:
     def __init__(self, display):
         self.display=display; self.jobs=queue.Queue(); self.closed=False; self.busy=False
         self.frame=tk.Frame(display.root,bg=BG,highlightbackground='#50ef97',highlightthickness=2)
-        self.frame.place(relx=.5,rely=.5,anchor='center',relwidth=.75,relheight=.80)
+        self.frame.place(relx=.5,rely=.5,anchor='center',relwidth=.75,relheight=.90)
         self.vars={}; self.focus=None; self.keyboard=None
         tk.Label(self.frame,text='FishFinder setup',bg=BG,fg=FG,font=('DejaVu Sans',17)).pack(pady=8)
         form=tk.Frame(self.frame,bg=BG); form.pack(fill='x',padx=18)
         fields=[('stratux_ip','Stratux IP address'),('own_tail','Your tail number'),
-                ('default_range','Default range (NM)'),('orientation','Map orientation'),('vertical_threshold_ft','Gray beyond (ft)'),
+                ('default_range','Default range (NM)'),('orientation','Map orientation'),('ownship_symbol','Ownship airplane'),('vertical_threshold_ft','Gray beyond (ft)'),
                 ('idle_seconds','Hide labels after (sec; 0 = never)'),('horizon_minutes','Projection (minutes)'),
                 ('trail_seconds','Trail history (seconds)')]
         for row,(key,label) in enumerate(fields):
-            tk.Label(form,text=label,bg=BG,fg=FG,font=('DejaVu Sans',10)).grid(row=row,column=0,sticky='w',pady=4)
+            tk.Label(form,text=label,bg=BG,fg=FG,font=('DejaVu Sans',10)).grid(row=row,column=0,sticky='w',pady=2)
             var=tk.StringVar(value=str(display.config[key]));self.vars[key]=var
-            if key in ('default_range','orientation'):
-                widget=ttk.Combobox(form,textvariable=var,values=('2','5','10','20') if key=='default_range' else ('track-up','north-up'),state='readonly',width=15)
+            if key in ('default_range','orientation','ownship_symbol'):
+                widget=ttk.Combobox(form,textvariable=var,values={'default_range':('2','5','10','20'),'orientation':('track-up','north-up'),'ownship_symbol':('high-wing','low-wing','twin')}[key],state='readonly',width=15)
             else:
                 widget=tk.Entry(form,textvariable=var,width=17,font=('DejaVu Sans',12))
                 widget.bind('<Button-1>',lambda event,w=widget:self.show_keyboard(w))
-            widget.grid(row=row,column=1,padx=8,pady=4)
+            widget.grid(row=row,column=1,padx=8,pady=2)
         for key,label in [('vertical_filter','Use gray vertical-separation symbols'),('airports_visible','Show airports by default')]:
             var=tk.BooleanVar(value=display.config[key]); self.vars[key]=var
             tk.Checkbutton(self.frame,text=label,variable=var,bg=BG,fg=FG,selectcolor=BG,activebackground=BG,activeforeground=FG,borderwidth=0,highlightthickness=0,relief="flat",offrelief="flat").pack(anchor='w',padx=18)

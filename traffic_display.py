@@ -466,13 +466,26 @@ class Display:
                     self.line((0,0),(ov[0]*self.projection_seconds,ov[1]*self.projection_seconds),WHITE,dash=(4,5),width=1,tags="ownship-projection")
                 # Original small aircraft silhouette, drawn above its trail/projection.
                 angle=(own_heading or 0)-self.map_heading
-                outline=[(-2,16),(2,16),(3,5),(14,0),(14,-4),(3,-2),(2,-10),
-                         (7,-12),(7,-15),(1,-13),(0,-17),(-1,-13),(-7,-15),
-                         (-7,-12),(-2,-10),(-3,-2),(-14,-4),(-14,0),(-3,5)]
+                shapes={
+                    'high-wing':[(-2,16),(2,16),(3,5),(14,0),(14,-4),(3,-2),(2,-10),
+                                 (7,-12),(7,-15),(1,-13),(0,-17),(-1,-13),(-7,-15),
+                                 (-7,-12),(-2,-10),(-3,-2),(-14,-4),(-14,0),(-3,5)],
+                    'low-wing':[(-2,16),(2,16),(3,0),(14,-4),(13,-8),(3,-5),(2,-11),
+                                (7,-13),(6,-15),(1,-13),(0,-17),(-1,-13),(-6,-15),
+                                (-7,-13),(-2,-11),(-3,-5),(-13,-8),(-14,-4),(-3,0)],
+                    'twin':[(-2,16),(2,16),(3,4),(17,0),(17,-4),(3,-3),(2,-11),
+                            (8,-13),(8,-16),(1,-14),(0,-17),(-1,-14),(-8,-16),
+                            (-8,-13),(-2,-11),(-3,-3),(-17,-4),(-17,0),(-3,4)]}
+                style=self.config['ownship_symbol'];outline=shapes[style]
                 def aircraft_points(points):
                     return [n for x,y in (rotate(p,-angle) for p in points)
                             for n in (self.cx+x*self.unit,self.cy-y*self.unit)]
                 c.create_polygon(*aircraft_points(outline),outline=WHITE,fill=WHITE,width=1,tags='ownship-symbol')
+                if style=='twin':
+                    for side in (-1,1):
+                        engine=[(side*7-1.5,7),(side*7+1.5,7),(side*7+1.5,-5),(side*7-1.5,-5)]
+                        c.create_polygon(*aircraft_points(engine),outline=WHITE,fill=WHITE,tags='ownship-symbol')
+                        c.create_line(*aircraft_points([(side*7-3,8),(side*7+3,8)]),fill=WHITE,width=1,tags='ownship-symbol')
                 c.create_polygon(*aircraft_points([(-1.4,9),(1.4,9),(1.5,3),(-1.5,3)]),
                                  outline=BG,fill=BG,tags='ownship-symbol')
             else:

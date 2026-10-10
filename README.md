@@ -1,4 +1,4 @@
-# FishFinder v0.4.4 — display, settings and connection recovery
+# FishFinder v0.4.5 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -164,3 +164,7 @@ See PI-STARTUP.md for collector service installation, journal logs, normal-user 
 ### v0.4.4 miniature ownship airplane
 
 Ownship now uses an original geometric airplane silhouette drawn directly on the Tk canvas, approximately 28×33 pixels at 800×800, with a dark cockpit. It rotates to course in north-up and points forward in track-up. The symbol draws above its white trail and projection. No external artwork or image dependencies were added. Twenty-eight existing tests pass; Pi visual testing remains required. Earlier scope previews show the prior ownship arrow.
+
+### v0.4.5 selectable ownship airplanes
+
+Setup → Ownship airplane offers high-wing, low-wing and twin. The selected original canvas silhouette is saved with settings, scales with the display and follows the existing course/orientation behavior. High-wing is the default. No external illustration was copied. Setup spacing is compacted to accommodate the new choices. All 28 tests and three symbol-render checks passed; touchscreen layout remains to be tested on the Pi. preview-ownship.png shows the symbols enlarged for comparison.
