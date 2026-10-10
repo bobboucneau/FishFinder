@@ -55,6 +55,41 @@ def route(address,tail,kind,start,waypoints):
     return Flight(address,tail,kind,start,nodes)
 
 
+def rounded_route(address,tail,kind,start,waypoints):
+    """Replace pattern corners with tangent circular arcs at 3 degrees/second."""
+    omega=math.radians(3);corners={}
+    for i in range(1,len(waypoints)-1):
+        a,b,c=waypoints[i-1:i+2]
+        incoming=(b[0]-a[0],b[1]-a[1]);outgoing=(c[0]-b[0],c[1]-b[1])
+        la,lb=math.hypot(*incoming),math.hypot(*outgoing)
+        u=(incoming[0]/la,incoming[1]/la);v=(outgoing[0]/lb,outgoing[1]/lb)
+        theta=math.atan2(u[0]*v[1]-u[1]*v[0],u[0]*v[0]+u[1]*v[1])
+        if abs(theta)<.01:continue
+        radius=b[3]/3600/omega;distance=radius*math.tan(abs(theta)/2)
+        if distance>=min(la,lb):raise ValueError('Pattern leg too short for a standard-rate turn')
+        entry=(b[0]-u[0]*distance,b[1]-u[1]*distance,b[2]+(a[2]-b[2])*distance/la,b[3])
+        exit=(b[0]+v[0]*distance,b[1]+v[1]*distance,b[2]+(c[2]-b[2])*distance/lb,b[3])
+        sign=1 if theta>0 else -1
+        center=(entry[0]-u[1]*radius*sign,entry[1]+u[0]*radius*sign)
+        corners[i]=(entry,exit,center,theta,radius)
+    nodes=[(0,*waypoints[0])]
+    def straight(p):
+        previous=nodes[-1];distance=math.hypot(p[0]-previous[1],p[1]-previous[2])
+        if distance<1e-9:return
+        nodes.append((previous[0]+distance*3600/((p[3]+previous[4])/2),*p))
+    for i in range(1,len(waypoints)):
+        if i not in corners:straight(waypoints[i]);continue
+        entry,exit,center,theta,radius=corners[i];straight(entry)
+        start_time=nodes[-1][0];duration=abs(theta)/omega
+        initial=math.atan2(entry[1]-center[1],entry[0]-center[0])
+        steps=math.ceil(duration)
+        for j in range(1,steps+1):
+            fraction=j/steps;angle=initial+theta*fraction
+            nodes.append((start_time+duration*fraction,center[0]+radius*math.cos(angle),
+                          center[1]+radius*math.sin(angle),entry[2]+(exit[2]-entry[2])*fraction,entry[3]))
+    return Flight(address,tail,kind,start,nodes)
+
+
 class Scenario:
     def __init__(self, airports_path=None, seed=22):
         path=airports_path or Path(__file__).with_name('airports.json')
@@ -77,7 +112,7 @@ class Scenario:
         forward=(dx/length,dy/length);right=(forward[1],-forward[0])
         climb_speed=75*MPH_TO_KNOTS;cruise=110*MPH_TO_KNOTS;approach=70*MPH_TO_KNOTS
         upwind=climb_speed*(700/500*60)/3600
-        crosswind=.70*MPH_TO_KNOTS
+        crosswind=.80  # NM; room for two standard-rate turns at 75 mph
         # Ahead is runway direction; right is the side of a right-hand pattern.
         layout=[(0,0,0,climb_speed),(upwind,0,700,climb_speed),
                 (upwind,crosswind,1000,climb_speed),(length/2,crosswind,1000,cruise),
@@ -135,7 +170,7 @@ class Scenario:
                 n=self.departure_counts[index];slot=n%count
                 points=self.patterns[index]
                 # Two circuits per sortie, including a touch-and-go.
-                f=route(0xD00000+index*10+slot,f'DEMO-{code}-{slot+1}','C172',start,points+points[1:])
+                f=rounded_route(0xD00000+index*10+slot,f'DEMO-{code}-{slot+1}','C172',start,points+points[1:])
                 self.admit(f);self.departure_counts[index]+=1
                 self.next_departures[index]+=interval
             elif index==4:

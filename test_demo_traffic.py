@@ -53,6 +53,47 @@ class DemoTests(unittest.TestCase):
             snap=read_snapshot(path)
             self.assertEqual(len(snap.reports),len(traffic));self.assertEqual(snap.ownship[0].comparison_alt,5000)
 
+    def test_standard_rate_pattern_arcs(self):
+        scene=Scenario();scene.advance(0);flight=scene.flights[0]
+        headings=[]
+        for a,b in zip(flight.nodes,flight.nodes[1:]):
+            headings.append(math.degrees(math.atan2(b[1]-a[1],b[2]-a[2])))
+        changes=[abs((b-a+180)%360-180) for a,b in zip(headings,headings[1:])]
+        self.assertLessEqual(max(changes),3.01)
+        self.assertGreater(sum(abs(x-3)<.01 for x in changes),100)
+
+    def test_latest_course_and_orbit_center_left(self):
+        from traffic_display import Point,velocity,xy,rotate
+        scene=Scenario()
+        for t in (600,1200,1800):
+            own=[]
+            for age in (30,3,0):
+                p=scene.ownship(t-age)
+                from demo_traffic import geographic
+                lat,lon=geographic(scene.origin,*p[:2])
+                own.append(Point(0,time.time()-age,lat,lon,100,5000))
+            v=velocity(own);heading=math.degrees(math.atan2(v[0],v[1]))
+            left=rotate(xy(*scene.origin,(own[-1].lat,own[-1].lon)),heading)
+            self.assertLess(left[0],-4.9);self.assertLess(abs(left[1]),.1)
+        # An old northbound leg must not drown out the latest eastbound leg.
+        p=[Point(1,0,37,-122,100,5000),Point(2,7,37.01,-122,100,5000),Point(3,10,37.01,-121.998,100,5000)]
+        self.assertGreater(velocity(p)[0],0);self.assertLess(abs(velocity(p)[1]),1e-5)
+
+    def test_orientation_and_ownship_trail_projection(self):
+        from traffic_display import HORIZON
+        from settings import DEFAULTS
+        display=gui();display.config['orientation']='track-up';display.projection_seconds=120
+        display.draw()
+        self.assertEqual(DEFAULTS['horizon_minutes'],2);self.assertEqual(HORIZON,300)
+        self.assertTrue(any(o.get('tags')=='ownship-trail' for k,c,o in display.canvas.commands))
+        projection=[c for k,c,o in display.canvas.commands if o.get('tags')=='ownship-projection'][0]
+        self.assertAlmostEqual(projection[0],projection[2],places=2)
+        self.assertLess(projection[3],projection[1])
+        display.config['orientation']='north-up';display.draw();self.assertEqual(display.map_heading,0)
+        display.last_touch=time.monotonic()-20;display.draw()
+        labels=[o.get('text') for k,c,o in display.canvas.commands]
+        self.assertTrue(all(label in labels for label in ('N','S','E','W')))
+
     def test_moving_demo_reaches_display_with_airports(self):
         scene=Scenario();now=time.time();display=gui();display.args.demo=False
         with tempfile.TemporaryDirectory() as tmp:

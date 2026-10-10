@@ -98,9 +98,9 @@ def velocity(history):
     latest = history[-1]
     if latest.speed <= 0.5:
         return (0.0, 0.0)
-    for previous in history:
+    for previous in reversed(history[:-1]):
         dt = latest.time - previous.time
-        if 1 <= dt <= 45:
+        if 0.2 <= dt <= 10:
             east, north = xy(latest.lat, latest.lon, (previous.lat, previous.lon))
             distance = math.hypot(east, north)
             # Reject tiny GPS jitter and implausible jumps rather than inventing track.
@@ -190,7 +190,7 @@ def read_snapshot(path):
             p = point(row)
             if p and isinstance(row['tail'], str) and row['tail'].strip():
                 reports.setdefault(row['tail'].strip(), []).append(p)
-        ownship = [p for row in conn.execute('SELECT * FROM ownship WHERE time >= ? ORDER BY time, id', (now-45,)) if (p := point(row))]
+        ownship = [p for row in conn.execute('SELECT * FROM ownship WHERE time >= ? ORDER BY time, id', (now-TRAIL_AGE,)) if (p := point(row))]
         labels = {}
         # Accept both the original schema and the upgraded collector schema.
         columns = {row[1] for row in conn.execute('PRAGMA table_info(aircraft)')}
@@ -312,8 +312,8 @@ class Display:
         self.radius_nm=args.range if args.range is not None else self.config['default_range']
         self.last_touch=time.monotonic(); self.idle=False
         self.setup_panel=None; self.update_status=''
-        global HORIZON, TRAIL_AGE
-        HORIZON=self.config['horizon_minutes']*60
+        global TRAIL_AGE
+        self.projection_seconds=self.config['horizon_minutes']*60
         TRAIL_AGE=self.config['trail_seconds']
         self.selected=None; self.hits=[]; self.buttons=[]
         self.exit_pending=False
@@ -322,6 +322,7 @@ class Display:
         self.airports_visible=self.config['airports_visible']; self.airport_hits=[]; self.airport_buttons=[]
         self.airport_query=None; self.airport_query_time=0.0; self.near_airports=[]
         self.anchor=None; self.last_own=None
+        self.map_heading=0.0
         self.worker=None
         self.demo_initialized=False
         if not args.demo:
@@ -343,6 +344,7 @@ class Display:
             self.cx+(x2-400)*self.unit,self.cy+(y2-400)*self.unit,**kwargs)
 
     def line(self,a,b,color,**kwargs):
+        a,b=rotate(a,self.map_heading),rotate(b,self.map_heading)
         clipped=clip_segment(a,b,self.radius_nm)
         if clipped:
             aa,bb=clipped
@@ -380,7 +382,7 @@ class Display:
         if self.config['own_tail']:
             histories={k:ps for k,ps in histories.items() if self.config['own_tail'] not in
                 [(snap.labels or {}).get(k,k).upper().split(' / ')[0], (snap.labels or {}).get(k,k).upper().split(' / ')[-1]]}
-        own=[p for p in snap.ownship if 0<=now-p.time<=45]
+        own=[p for p in snap.ownship if 0<=now-p.time<=TRAIL_AGE]
         fix=own[-1] if own and now-own[-1].time<=OWN_AGE and not snap.error else None
         if fix:
             origin=(fix.lat,fix.lon);self.last_own=origin
@@ -402,16 +404,18 @@ class Display:
                 self.anchor=origin;mode='NO OWN GPS · ESTIMATED CENTER'
             else:
                 origin=None;mode='WAITING FOR POSITION DATA'
+        own_heading=None if ov is None or math.hypot(*ov)<1e-10 else math.degrees(math.atan2(ov[0],ov[1]))%360
+        self.map_heading=own_heading if self.config['orientation']=='track-up' and own_heading is not None else 0.0
+        if fix:mode='OWN GPS · '+('TRACK UP' if self.config['orientation']=='track-up' and own_heading is not None else 'NORTH UP')
         for fraction in (0.25,0.5,0.75,1):
             r=radius*fraction
             c.create_oval(self.cx-r,self.cy-r,self.cx+r,self.cy+r,outline='#285449',width=1)
             self.text(580 if not self.idle and fraction in (0.5,0.75) else 426,400-398*fraction+13,f'{self.radius_nm*fraction:g} NM',fill=MUTED,size=9,anchor='w')
         c.create_line(self.cx-radius,self.cy,self.cx+radius,self.cy,fill='#112921')
         c.create_line(self.cx,self.cy-radius,self.cx,self.cy+radius,fill='#112921')
-        if not self.idle: self.text(400,143,'N',fill=GREEN,size=11)
-        if not self.idle: self.text(400,661,'S',fill=MUTED,size=10)
-        if not self.idle: self.text(133,400,'W',fill=MUTED,size=10)
-        if not self.idle: self.text(668,400,'E',fill=MUTED,size=10)
+        for label,bearing in [('N',0),('E',90),('S',180),('W',270)]:
+            vector=rotate((math.sin(math.radians(bearing)),math.cos(math.radians(bearing))),self.map_heading)
+            self.text(400+378*vector[0],400-378*vector[1],label,fill=WHITE,size=12)
         outside=0; infos={}
         self.airport_origin=origin; self.airport_fix=fix
         self.airport_track=None if ov is None or math.hypot(*ov)<1e-10 or not fix or fix.speed<5 else math.degrees(math.atan2(ov[0],ov[1]))%360
@@ -424,7 +428,7 @@ class Display:
                 self.near_airports=self.catalog.nearby(origin,self.radius_nm+0.2,xy)
                 self.airport_query=key;self.airport_query_time=query_now
             for _,airport,_ in self.near_airports:
-                pos=xy(airport['lat'],airport['lon'],origin)
+                pos=rotate(xy(airport['lat'],airport['lon'],origin),self.map_heading)
                 if math.hypot(*pos)>self.radius_nm: continue
                 x,y=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels
                 sz=5*self.unit
@@ -434,7 +438,7 @@ class Display:
             boxes=[]
             # Reserve the existing traffic symbol and label areas before airport labels.
             for tail,history in histories.items():
-                pos=xy(history[-1].lat,history[-1].lon,origin)
+                pos=rotate(xy(history[-1].lat,history[-1].lon,origin),self.map_heading)
                 if math.hypot(*pos)>self.radius_nm: continue
                 tx,ty=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels
                 text=(snap.labels or {}).get(tail,tail)+(' · OLD' if now-history[-1].time>10 else '')
@@ -456,10 +460,14 @@ class Display:
                 boxes.append(box)
         if origin:
             if fix:
-                c.create_polygon(self.cx,self.cy-12*self.unit,self.cx-8*self.unit,self.cy+10*self.unit,
-                    self.cx,self.cy+5*self.unit,self.cx+8*self.unit,self.cy+10*self.unit,outline=WHITE,fill=BG,width=2)
+                for a,b in zip(own,own[1:]):
+                    self.line(xy(a.lat,a.lon,origin),xy(b.lat,b.lon,origin),WHITE,width=2,tags="ownship-trail")
+                # Shape points forward; north-up rotates it to true track.
+                angle=(own_heading or 0)-self.map_heading
+                shape=[rotate((x,y),-angle) for x,y in [(0,12),(-8,-10),(0,-5),(8,-10)]]
+                c.create_polygon(*[n for x,y in shape for n in (self.cx+x*self.unit,self.cy-y*self.unit)],outline=WHITE,fill=BG,width=2)
                 if ov is not None:
-                    self.line((0,0),(ov[0]*HORIZON,ov[1]*HORIZON),WHITE,dash=(4,5),width=1)
+                    self.line((0,0),(ov[0]*self.projection_seconds,ov[1]*self.projection_seconds),WHITE,dash=(4,5),width=1,tags="ownship-projection")
             else:
                 c.create_oval(self.cx-5*self.unit,self.cy-5*self.unit,self.cx+5*self.unit,self.cy+5*self.unit,outline=MUTED)
                 if not self.idle: self.text(400,420,'REFERENCE',fill=MUTED,size=9)
@@ -489,15 +497,16 @@ class Display:
                     uncertain=any(q.estimated for q in history if trail[i].time<=q.time<=trail[i+1].time)
                     self.line(a,b,ESTIMATED if uncertain else color,width=2,**({'dash':(3,4)} if uncertain else {}))
                 if tv is not None:
-                    end=(pos[0]+tv[0]*HORIZON,pos[1]+tv[1]*HORIZON)
+                    end=(pos[0]+tv[0]*self.projection_seconds,pos[1]+tv[1]*self.projection_seconds)
                     self.line(pos,end,ESTIMATED if p.estimated else color,dash=(5,4),width=1,arrow=tk.LAST)
-                x,y=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels
+                screen_pos=rotate(pos,self.map_heading)
+                x,y=self.cx+screen_pos[0]*self.pixels,self.cy-screen_pos[1]*self.pixels
                 sz=7*self.unit
                 blink=color==RED and int(now*2)%2==0
                 c.create_polygon(x,y-sz,x+sz,y,x,y+sz,x-sz,y,fill=BG if separated else WHITE if blink else color,outline=color,width=2)
                 label=(snap.labels or {}).get(tail,tail)+(' · EST' if p.estimated else '')+(' · OLD' if age>10 else '')
                 # Keep the label inside the scope even near its perimeter.
-                side=-1 if pos[0]>=0 else 1
+                side=-1 if screen_pos[0]>=0 else 1
                 c.create_text(x+side*12*self.unit,y-10*self.unit,text=label,anchor='e' if side<0 else 'w',
                     fill=color,font=('DejaVu Sans',max(9,int(10*self.unit))),tags='map-label')
                 self.hits.append((x,y,tail))
@@ -689,8 +698,8 @@ class Display:
     def apply_settings(self,values):
         self.config=settings.save(values)
         self.radius_nm=self.config['default_range']; self.airports_visible=self.config['airports_visible']
-        global HORIZON,TRAIL_AGE
-        HORIZON=self.config['horizon_minutes']*60; TRAIL_AGE=self.config['trail_seconds']
+        global TRAIL_AGE
+        self.projection_seconds=self.config['horizon_minutes']*60; TRAIL_AGE=self.config['trail_seconds']
         self.last_touch=time.monotonic(); self.draw()
 
     def tap(self,event):

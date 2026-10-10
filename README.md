@@ -1,4 +1,4 @@
-# FishFinder v0.4.1 — display, settings and connection recovery
+# FishFinder v0.4.2 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -148,3 +148,11 @@ A calming blue/teal mountain splash displays for three seconds at startup. Tap t
 ### v0.4.1 moving display demo
 
 Both programs now use --demo for the airport scenario. The display selects demo_objects.db unless --db explicitly selects a different path; it does not generate traffic itself. On detecting collector demo data, airports start visible and range starts at 20 NM unless --range was specified, without changing saved preferences. The old display-only fixed targets use --sample-demo. Twenty-five tests pass, including actual motion through SQLite to the display and O22 visibility. Pi testing remains required.
+
+### v0.4.2 track-up, recent courses and rounded turns
+
+Track-up is the default map orientation. Ownship remains centered and points along its ground track; the map and persistent N/S/E/W labels rotate around it. Setup → Map orientation can select north-up, where the ownship symbol rotates to its true course. If course is unavailable, the map falls back to north-up. Ownship's retained recent positions now draw a white trail, including during idle display mode.
+
+Direction is inferred from the newest pair of usable positions, searching back at most ten seconds only when the pair is too close together or implausible. Reported speed still determines the projection distance. Projection (minutes) defaults to two and remains adjustable in Setup. Previously saved values are preserved: change a saved five-minute projection to two manually. Conflict assessments and vertical-separation checks retain a five-minute horizon independent of the drawn projection length. Straight projections represent holding the present course, including the tangent during a turn.
+
+C172 demo corners are tangent circular arcs at a standard rate of three degrees per second; a right-angle turn takes thirty seconds. The crosswind leg is now 0.80 NM wide to accommodate standard-rate turns at 75 mph. All routes still pass the launch separation gate. Twenty-eight automated tests pass, covering recent direction, orbit reference left-of-ownship, cardinal persistence, ownship trail/projection, standard-rate curves and a full hour of separated simulation. Preview-track-up.png is a rendering of the new idle scope with simulated data. Actual Pi touch and rendering remain to be tested.

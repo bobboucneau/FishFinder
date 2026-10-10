@@ -21,14 +21,14 @@ class Setup:
         tk.Label(self.frame,text='FishFinder setup',bg=BG,fg=FG,font=('DejaVu Sans',17)).pack(pady=8)
         form=tk.Frame(self.frame,bg=BG); form.pack(fill='x',padx=18)
         fields=[('stratux_ip','Stratux IP address'),('own_tail','Your tail number'),
-                ('default_range','Default range (NM)'),('vertical_threshold_ft','Gray beyond (ft)'),
+                ('default_range','Default range (NM)'),('orientation','Map orientation'),('vertical_threshold_ft','Gray beyond (ft)'),
                 ('idle_seconds','Hide labels after (sec; 0 = never)'),('horizon_minutes','Projection (minutes)'),
                 ('trail_seconds','Trail history (seconds)')]
         for row,(key,label) in enumerate(fields):
             tk.Label(form,text=label,bg=BG,fg=FG,font=('DejaVu Sans',10)).grid(row=row,column=0,sticky='w',pady=4)
             var=tk.StringVar(value=str(display.config[key]));self.vars[key]=var
-            if key=='default_range':
-                widget=ttk.Combobox(form,textvariable=var,values=('2','5','10','20'),state='readonly',width=15)
+            if key in ('default_range','orientation'):
+                widget=ttk.Combobox(form,textvariable=var,values=('2','5','10','20') if key=='default_range' else ('track-up','north-up'),state='readonly',width=15)
             else:
                 widget=tk.Entry(form,textvariable=var,width=17,font=('DejaVu Sans',12))
                 widget.bind('<Button-1>',lambda event,w=widget:self.show_keyboard(w))
