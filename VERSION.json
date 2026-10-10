@@ -1,12 +1,14 @@
 {
-  "version": "0.4.2",
-  "change": "Track-up map, persistent rotating cardinals, ownship trail, recent course and two-minute projections; standard-rate demo turns",
+  "version": "0.4.3",
+  "change": "Provide previewable normal-user collector service and optional console autologin/startx display installer",
   "files": {
     "COLLECTOR-NOTES.md": "8559bf93c9104426d951306f6ef1ec9aad114a820aa1c19abcdf40240faa7b65",
     "FishFinder.py": "2a5658e994b87d35cd4be1b5ba4aa9b9b8a15619894fe9e9180b264b48915857",
-    "README.md": "0c20a2662c1cda27e26d39b28cf57bf9cb7b1df4ac075c1b8f041ce3b3a95593",
+    "PI-STARTUP.md": "c2d42db625b6796ebd0ea1b8d22cba2be27577f179e8d132967c51e8516f11ce",
+    "README.md": "daee9298fdf8e59542156ca54d8cf9573860cbffe2d70ca0cc0757f9fe735d89",
     "airport_data.py": "d2a1d762d26c4ad843822534eebd43f16e6c42ce739709fa8fd9e6748e45561a",
     "airports.json": "a983d199c9ca849e12382a35e67c96bde505e2db0ff9754255c0c8c4c0ee658c",
+    "configure_pi.py": "f9d3dfba70e9c96bffa9d09ba3d24e3703f944f96e20d969b856ec2414b145a3",
     "demo_traffic.py": "39148d40ba241031b1b55f7f2d387c3112ad395a6fa1484eb398ecc7d743c086",
     "preview-full.png": "4fae170741a67b460737b586fd9e0e3ee5b027216304c3522163cc3bfa1b3202",
     "preview-idle.png": "bf0c253c60e00428f0529d41ef4a775dd23a9f66b0cb7ee339d682bb9d947634",

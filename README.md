@@ -1,4 +1,4 @@
-# FishFinder v0.4.2 — display, settings and connection recovery
+# FishFinder v0.4.3 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -156,3 +156,7 @@ Track-up is the default map orientation. Ownship remains centered and points alo
 Direction is inferred from the newest pair of usable positions, searching back at most ten seconds only when the pair is too close together or implausible. Reported speed still determines the projection distance. Projection (minutes) defaults to two and remains adjustable in Setup. Previously saved values are preserved: change a saved five-minute projection to two manually. Conflict assessments and vertical-separation checks retain a five-minute horizon independent of the drawn projection length. Straight projections represent holding the present course, including the tangent during a turn.
 
 C172 demo corners are tangent circular arcs at a standard rate of three degrees per second; a right-angle turn takes thirty seconds. The crosswind leg is now 0.80 NM wide to accommodate standard-rate turns at 75 mph. All routes still pass the launch separation gate. Twenty-eight automated tests pass, covering recent direction, orbit reference left-of-ownship, cardinal persistence, ownship trail/projection, standard-rate curves and a full hour of separated simulation. Preview-track-up.png is a rendering of the new idle scope with simulated data. Actual Pi touch and rendering remain to be tested.
+
+### v0.4.3 Pi service and console startup
+
+See PI-STARTUP.md for collector service installation, journal logs, normal-user startx launch, DSI/Goodix mapping, optional tty1 autologin, bench demo mode and undo steps. configure_pi.py previews its files unless --install is explicitly supplied. It applies changes only under sudo on Linux, uses the existing virtual environment and refuses the root account for application execution. No Pi setup was applied from the Mac. Twenty-eight application tests, Python compilation and generated shell syntax checks passed; systemd/X/reboot testing remains on the Pi.
