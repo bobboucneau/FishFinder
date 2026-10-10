@@ -1,4 +1,4 @@
-# FishFinder v0.4.3 — display, settings and connection recovery
+# FishFinder v0.4.4 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -160,3 +160,7 @@ C172 demo corners are tangent circular arcs at a standard rate of three degrees 
 ### v0.4.3 Pi service and console startup
 
 See PI-STARTUP.md for collector service installation, journal logs, normal-user startx launch, DSI/Goodix mapping, optional tty1 autologin, bench demo mode and undo steps. configure_pi.py previews its files unless --install is explicitly supplied. It applies changes only under sudo on Linux, uses the existing virtual environment and refuses the root account for application execution. No Pi setup was applied from the Mac. Twenty-eight application tests, Python compilation and generated shell syntax checks passed; systemd/X/reboot testing remains on the Pi.
+
+### v0.4.4 miniature ownship airplane
+
+Ownship now uses an original geometric airplane silhouette drawn directly on the Tk canvas, approximately 28×33 pixels at 800×800, with a dark cockpit. It rotates to course in north-up and points forward in track-up. The symbol draws above its white trail and projection. No external artwork or image dependencies were added. Twenty-eight existing tests pass; Pi visual testing remains required. Earlier scope previews show the prior ownship arrow.

@@ -462,12 +462,19 @@ class Display:
             if fix:
                 for a,b in zip(own,own[1:]):
                     self.line(xy(a.lat,a.lon,origin),xy(b.lat,b.lon,origin),WHITE,width=2,tags="ownship-trail")
-                # Shape points forward; north-up rotates it to true track.
-                angle=(own_heading or 0)-self.map_heading
-                shape=[rotate((x,y),-angle) for x,y in [(0,12),(-8,-10),(0,-5),(8,-10)]]
-                c.create_polygon(*[n for x,y in shape for n in (self.cx+x*self.unit,self.cy-y*self.unit)],outline=WHITE,fill=BG,width=2)
                 if ov is not None:
                     self.line((0,0),(ov[0]*self.projection_seconds,ov[1]*self.projection_seconds),WHITE,dash=(4,5),width=1,tags="ownship-projection")
+                # Original small aircraft silhouette, drawn above its trail/projection.
+                angle=(own_heading or 0)-self.map_heading
+                outline=[(-2,16),(2,16),(3,5),(14,0),(14,-4),(3,-2),(2,-10),
+                         (7,-12),(7,-15),(1,-13),(0,-17),(-1,-13),(-7,-15),
+                         (-7,-12),(-2,-10),(-3,-2),(-14,-4),(-14,0),(-3,5)]
+                def aircraft_points(points):
+                    return [n for x,y in (rotate(p,-angle) for p in points)
+                            for n in (self.cx+x*self.unit,self.cy-y*self.unit)]
+                c.create_polygon(*aircraft_points(outline),outline=WHITE,fill=WHITE,width=1,tags='ownship-symbol')
+                c.create_polygon(*aircraft_points([(-1.4,9),(1.4,9),(1.5,3),(-1.5,3)]),
+                                 outline=BG,fill=BG,tags='ownship-symbol')
             else:
                 c.create_oval(self.cx-5*self.unit,self.cy-5*self.unit,self.cx+5*self.unit,self.cy+5*self.unit,outline=MUTED)
                 if not self.idle: self.text(400,420,'REFERENCE',fill=MUTED,size=9)

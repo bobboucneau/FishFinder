@@ -1,11 +1,11 @@
 {
-  "version": "0.4.3",
-  "change": "Provide previewable normal-user collector service and optional console autologin/startx display installer",
+  "version": "0.4.4",
+  "change": "Replace ownship arrow with an original rotating miniature aircraft silhouette",
   "files": {
     "COLLECTOR-NOTES.md": "8559bf93c9104426d951306f6ef1ec9aad114a820aa1c19abcdf40240faa7b65",
     "FishFinder.py": "2a5658e994b87d35cd4be1b5ba4aa9b9b8a15619894fe9e9180b264b48915857",
     "PI-STARTUP.md": "c2d42db625b6796ebd0ea1b8d22cba2be27577f179e8d132967c51e8516f11ce",
-    "README.md": "daee9298fdf8e59542156ca54d8cf9573860cbffe2d70ca0cc0757f9fe735d89",
+    "README.md": "a7a95b1a1008235e63e9876a40e70210ba7fe811b39286060170c675bb33696a",
     "airport_data.py": "d2a1d762d26c4ad843822534eebd43f16e6c42ce739709fa8fd9e6748e45561a",
     "airports.json": "a983d199c9ca849e12382a35e67c96bde505e2db0ff9754255c0c8c4c0ee658c",
     "configure_pi.py": "f9d3dfba70e9c96bffa9d09ba3d24e3703f944f96e20d969b856ec2414b145a3",
@@ -20,7 +20,7 @@
     "test_airports.py": "a53a6cd21072d091c7a7e10bf85e572f2a143019126789a8dbfe334943e4bd4f",
     "test_demo_traffic.py": "39b76efeb3dff024d97d7a33d336d46e05691722fbe01cca8fd2bea867b5cfc2",
     "test_settings_display.py": "1a4133ad1cdd79f8f289dc355e2deda07f234b8ebc485cb9344ff8b4f66b119c",
-    "traffic_display.py": "884946ab29436cee36e0abe87cc726e377fab1405b4ae18451692d4c6c6697a9",
+    "traffic_display.py": "63587354e7105dd67b5b0cf9ff0e00273fced74b39d586231493f36f8b9ba3e1",
     "update_airports.py": "222802049307460e96dfd2e70a3a6b4bb68de2a3b7779f52c434f94c3a103034"
   }
 }
