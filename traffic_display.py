@@ -323,6 +323,7 @@ class Display:
         self.airport_query=None; self.airport_query_time=0.0; self.near_airports=[]
         self.anchor=None; self.last_own=None
         self.worker=None
+        self.demo_initialized=False
         if not args.demo:
             self.worker=threading.Thread(target=reader,args=(self.stop,self.out,args.db),daemon=True,name='database-reader')
             self.worker.start()
@@ -356,6 +357,11 @@ class Display:
                 self.snapshot=self.out.get_nowait()
             except queue.Empty:
                 pass
+        if (not self.demo_initialized and self.snapshot.receiver
+                and self.snapshot.receiver[2].startswith("DEMO:")):
+            self.airports_visible=True
+            if self.args.range is None:self.radius_nm=20
+            self.demo_initialized=True
         if time.monotonic()<self.splash_until:
             draw_splash(self.canvas,self.canvas.winfo_width(),self.canvas.winfo_height())
         else:self.draw()
@@ -732,12 +738,18 @@ def main():
     parser.add_argument('--fullscreen',action='store_true')
     parser.add_argument('--geometry',default='800x800',
         help='Initial Tk window size/position, e.g. 800x800+1920+0 on X11')
-    parser.add_argument('--demo',action='store_true')
+    demo_options=parser.add_mutually_exclusive_group()
+    demo_options.add_argument('--demo',action='store_true',help='Read the moving collector demo database')
+    demo_options.add_argument('--sample-demo',action='store_true',help='Legacy display-only fixed sample targets')
     parser.add_argument('--no-ownship',action='store_true',help='Demo without an ownship fix')
     parser.add_argument('--range',type=int,choices=(2,5,10,20),default=None)
     parser.add_argument('--splash-seconds',type=float,default=3,help='Startup splash duration; 0 disables, tap dismisses')
     args=parser.parse_args()
     if not math.isfinite(args.splash_seconds) or args.splash_seconds<0:parser.error('Splash duration must be finite and nonnegative')
+    if args.demo and args.db=='/var/local/FishFinder/flying_objects.db':
+        args.db='/var/local/FishFinder/demo_objects.db'
+    # Internally this flag remains the legacy sample renderer.
+    args.demo=args.sample_demo
     root=tk.Tk();Display(root,args);root.mainloop()
 
 

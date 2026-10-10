@@ -9,7 +9,7 @@ import unittest
 from demo_traffic import Scenario,MPH_TO_KNOTS
 from test_settings_display import collector
 from traffic_display import read_snapshot,draw_splash
-from test_airports import Canvas
+from test_airports import Canvas,gui
 
 
 class DemoTests(unittest.TestCase):
@@ -52,6 +52,28 @@ class DemoTests(unittest.TestCase):
                 self.assertTrue(collector.record_ownship(conn,own,now))
             snap=read_snapshot(path)
             self.assertEqual(len(snap.reports),len(traffic));self.assertEqual(snap.ownship[0].comparison_alt,5000)
+
+    def test_moving_demo_reaches_display_with_airports(self):
+        scene=Scenario();now=time.time();display=gui();display.args.demo=False
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'demo.db';collector.initialize(path)
+            with closing(sqlite3.connect(path)) as conn:
+                previous=None
+                for second in range(10):
+                    traffic,own=scene.messages(600+second)
+                    stamp=now-9+second
+                    for message in traffic:collector.record_traffic(conn,message,stamp)
+                    collector.record_ownship(conn,own,stamp)
+                    with conn:conn.execute('INSERT OR REPLACE INTO receiver_status VALUES (1,?,?,?)',(stamp,1,'DEMO: simulated traffic'))
+                    snap=read_snapshot(path)
+                    if previous:
+                        common=set(previous.reports)&set(snap.reports)
+                        self.assertTrue(any((previous.reports[k][-1].lat,previous.reports[k][-1].lon)!=(snap.reports[k][-1].lat,snap.reports[k][-1].lon) for k in common))
+                    previous=snap
+            display.snapshot=snap;display.args.range=None;display.airports_visible=False
+            display.tick()
+            self.assertTrue(display.airports_visible);self.assertEqual(display.radius_nm,20)
+            self.assertTrue(any(ident=='KO22' for x,y,ident in display.airport_hits))
 
     def test_splash_has_readable_title_on_round_canvas(self):
         c=Canvas();draw_splash(c,800,800)

@@ -1,4 +1,4 @@
-# FishFinder v0.4.0 — display, settings and connection recovery
+# FishFinder v0.4.1 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -132,10 +132,10 @@ Stop the live collector before running these commands from the installed FishFin
 
 ```sh
 ./FishFinder.py --demo
-./traffic_display.py --db /var/local/FishFinder/demo_objects.db --fullscreen --geometry 800x800
+./traffic_display.py --demo --fullscreen --geometry 800x800
 ```
 
-Use your existing DSI monitor geometry if HDMI is attached. Do not pass the display's old `--demo` flag: that remains the simple display-only demo, independent of the new collector simulator. The collector writes a separate demo_objects.db, never the live database by default. Both scripts accept `--db PATH` for a custom demo database with an existing parent directory. Stop the demo and restart the collector/display normally to return to Stratux.
+Use your existing DSI monitor geometry if HDMI is attached. The display's `--demo` flag reads the moving collector demo database. The old fixed display-only sample is available as `--sample-demo`. The collector writes a separate demo_objects.db, never the live database by default. Both scripts accept `--db PATH` for a custom demo database with an existing parent directory. Stop the demo and restart the collector/display normally to return to Stratux.
 
 The seed defaults to 22 (`FishFinder.py --demo-seed 123 --demo` changes it). Each run starts ten minutes into the scenario so aircraft are already airborne. Sampling, retention, identity tracking and database reads use the regular pipeline. Traffic is marked DEMO in the display and uses synthetic identifiers. No Stratux network request is made.
 
@@ -144,3 +144,7 @@ C172s fly two right-hand circuits per sortie, including a touch-and-go, at O22/1
 Airliners cross the region roughly once a minute at 28,000–32,000 ft and 480–510 kt. Random GA transits use 4,500–12,000 ft and 120–400 kt with a triangular distribution weighted toward slower speeds. Helicopters climb to 3,500 ft and fly at 80 kt between Columbia and E45, southwest out of the area, or southwest inbound. Ownship circles O22 at a 5 NM radius, 5,000 ft, 100 kt. Candidate flights are skipped if their one-second trajectory checks approach within 0.35 NM while less than 400 ft apart, including ownship; all simulated flights are geometrical scenarios, not terrain-aware route planning.
 
 A calming blue/teal mountain splash displays for three seconds at startup. Tap to dismiss it, or use `--splash-seconds 0` to disable it. No new packages are needed beyond the existing Tkinter/websocket-client installation. Twenty-four automated tests pass, including an hour of separation checks, pattern geometry, deterministic generation, and the real database pipeline. Collector startup/shutdown was smoke-tested without network access. Raspberry Pi touch/fullscreen and visual testing remain required. Existing preview images depict earlier display examples; preview-splash.png shows the new splash artwork.
+
+### v0.4.1 moving display demo
+
+Both programs now use --demo for the airport scenario. The display selects demo_objects.db unless --db explicitly selects a different path; it does not generate traffic itself. On detecting collector demo data, airports start visible and range starts at 20 NM unless --range was specified, without changing saved preferences. The old display-only fixed targets use --sample-demo. Twenty-five tests pass, including actual motion through SQLite to the display and O22 visibility. Pi testing remains required.
