@@ -53,6 +53,38 @@ class DemoTests(unittest.TestCase):
             snap=read_snapshot(path)
             self.assertEqual(len(snap.reports),len(traffic));self.assertEqual(snap.ownship[0].comparison_alt,5000)
 
+    def test_ownship_tail_source_selection_and_fallback(self):
+        from traffic_display import Point,Snapshot,select_ownship
+        from settings import DEFAULTS
+        now=time.time();gps=Point(1,now,37,-122,100,5000)
+        adsb=Point(2,now,38,-121,110,6000,6000,'pressure',False,0)
+        cfg=dict(DEFAULTS,own_tail='N123AB')
+        snap=Snapshot({'icao:123':[adsb]},[gps],labels={'icao:123':'N123AB / FLIGHT1'})
+        reports,own,source=select_ownship(snap,snap.reports,cfg,now)
+        self.assertEqual(own,[adsb]);self.assertEqual(source,'ADSB');self.assertFalse(reports)
+        cfg['ownship_source']='stratux-first'
+        self.assertEqual(select_ownship(snap,snap.reports,cfg,now)[1],[gps])
+        cfg['ownship_source']='adsb-first'
+        stale=Point(2,now-6,38,-121,110,6000)
+        self.assertEqual(select_ownship(snap,{'icao:123':[stale]},cfg,now)[1],[gps])
+        estimated=Point(2,now,38,-121,110,6000,None,None,True,0)
+        self.assertEqual(select_ownship(snap,{'icao:123':[estimated]},cfg,now)[1],[gps])
+
+    def test_write_preflight_checks_before_airport_download(self):
+        from unittest.mock import patch
+        from fs_checks import write_problem
+        import update_airports
+        with tempfile.TemporaryDirectory() as tmp:
+            target=Path(tmp)/'airports.json'
+            self.assertEqual(write_problem(target,atomic=True),'')
+            with patch('fs_checks.tempfile.TemporaryFile',side_effect=PermissionError('directory denied')):
+                self.assertIn('directory denied',write_problem(target,atomic=True))
+                with patch.object(update_airports,'fetch') as fetch:
+                    with self.assertRaises(PermissionError):update_airports.refresh(target)
+                    fetch.assert_not_called()
+        # A 68% square's corners remain inside the 398-pixel round display.
+        self.assertLess(math.hypot(800*.68/2,800*.68/2),398)
+
     def test_standard_rate_pattern_arcs(self):
         scene=Scenario();scene.advance(0);flight=scene.flights[0]
         headings=[]

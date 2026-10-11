@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import urllib.request
+from fs_checks import write_problem
 from airport_data import coordinates
 
 BASE = 'https://davidmegginson.github.io/ourairports-data/'
@@ -55,6 +56,8 @@ def build(airports, runways, frequencies, countries=()):
 
 def refresh(output, countries=None):
     output=Path(output)
+    problem=write_problem(output,atomic=True)
+    if problem:raise PermissionError(problem)
     if countries is None:
         try: countries=json.loads(output.read_text()).get('countries',[])
         except (OSError,ValueError): countries=[]

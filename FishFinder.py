@@ -19,6 +19,7 @@ from contextlib import closing
 from pathlib import Path
 from datetime import datetime, timezone
 import settings
+from fs_checks import database_problem
 
 import websocket
 
@@ -399,6 +400,8 @@ def main():
     settings.load()  # Fail clearly on invalid configuration before starting workers.
     logging.getLogger('websocket').setLevel(logging.CRITICAL)
     websocket.setdefaulttimeout(HTTP_TIMEOUT)
+    problem=database_problem(DATABASE_PATH)
+    if problem:raise RuntimeError(problem)
     initialize(DATABASE_PATH)
     logging.info('Using database %s', DATABASE_PATH)
     stop = threading.Event()

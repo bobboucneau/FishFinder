@@ -7,7 +7,7 @@ import tempfile
 
 DEFAULTS = dict(stratux_ip='192.168.10.1', own_tail='', default_range=10,
                 idle_seconds=10, vertical_threshold_ft=5000, vertical_filter=True,
-                horizon_minutes=2, orientation='track-up', ownship_symbol='high-wing', airports_visible=True, trail_seconds=300)
+                horizon_minutes=2, orientation='track-up', ownship_symbol='high-wing', ownship_source='adsb-first', airports_visible=True, trail_seconds=300)
 SETTINGS_PATH = Path(os.environ.get('FISHFINDER_SETTINGS', str(Path(__file__).resolve().parent/'settings.json')))
 
 
@@ -26,6 +26,7 @@ def validate(values):
         if not low<=result[key]<=high: raise ValueError(f'{key}: choose {low} to {high}')
     if result['orientation'] not in ('track-up','north-up'):raise ValueError('Orientation: choose track-up or north-up')
     if result['ownship_symbol'] not in ('high-wing','low-wing','twin'):raise ValueError('Ownship airplane: choose high-wing, low-wing or twin')
+    if result['ownship_source'] not in ('adsb-first','stratux-first'):raise ValueError('Ownship source: choose adsb-first or stratux-first')
     result['default_range']=int(result['default_range'])
     if result['default_range'] not in (2,5,10,20): raise ValueError('Range must be 2, 5, 10 or 20 NM')
     for key in ('vertical_filter','airports_visible'):
@@ -42,6 +43,9 @@ def load(path=SETTINGS_PATH):
 
 def save(values,path=SETTINGS_PATH):
     values=validate(values); path=Path(path)
+    from fs_checks import write_problem
+    problem=write_problem(path,atomic=True)
+    if problem:raise PermissionError(problem)
     temp=None
     try:
         with tempfile.NamedTemporaryFile(mode='w',encoding='utf-8',dir=path.parent,delete=False) as f:

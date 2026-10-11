@@ -1,4 +1,4 @@
-# FishFinder v0.4.5 — display, settings and connection recovery
+# FishFinder v0.4.6 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.
 
@@ -168,3 +168,11 @@ Ownship now uses an original geometric airplane silhouette drawn directly on the
 ### v0.4.5 selectable ownship airplanes
 
 Setup → Ownship airplane offers high-wing, low-wing and twin. The selected original canvas silhouette is saved with settings, scales with the display and follows the existing course/orientation behavior. High-wing is the default. No external illustration was copied. Setup spacing is compacted to accommodate the new choices. All 28 tests and three symbol-render checks passed; touchscreen layout remains to be tested on the Pi. preview-ownship.png shows the symbols enlarged for comparison.
+
+### v0.4.6 round-screen Setup, write checks and ownship selection
+
+Setup is now an inscribed 68%-width/height square with Display and Receiver / Updates pages; values remain in the form across page changes. Settings/airport permission problems are probed at GUI startup and reported through a persistent scope notice and Setup status, with paths and directory-permission guidance. Settings saves and airport updates recheck before writing; airport updates check before downloading. Collector startup probes its database directory, database and existing WAL/SHM files under the actual user's permissions. No chmod/chown is applied by these checks. Permissions may change after a probe, so write errors are still handled by existing code. Installer/systemd and X-session log permissions still require their normal Pi configuration checks.
+
+Setup → Receiver / Updates → Ownship preference selects adsb-first (default) or stratux-first. With Your tail number configured, a matching report is preferred only if its position is observed, at most five seconds old by receipt, and its reported Age is at most five seconds when available. Explicit extrapolations never become ownship fixes. Otherwise fall back to fresh Stratux GPS, or to the existing no-ownship behavior if neither source is usable. Matching tail reports are suppressed as duplicate targets in either mode. Display names the active source; GPS and ADS-B histories are not spliced together, so a source change can shift position or shorten the visible trail. Altitude reference remains explicit for conflict styling.
+
+Thirty tests passed, including source preference, freshness, extrapolation rejection and failure-before-download permission behavior. Pi visual testing remains required. RELEASE-AND-MAPS.md explains GitHub Release hosting, the still-unimplemented verified code updater, interpreted/compiled recommendations and future offline maps. No map renderer, code installer or release publication was added in this update.

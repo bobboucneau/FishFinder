@@ -212,6 +212,23 @@ def active_histories(reports, now):
     return {k:ps for k,ps in histories.items() if ps and now-ps[-1].time<=REPORT_AGE}
 
 
+def select_ownship(snapshot,histories,config,now):
+    """Prefer fresh observed ADS-B for the configured tail; never extrapolated fixes."""
+    tail=config['own_tail'];matching={k for k in histories if tail and tail in
+        [name.strip().upper() for name in (snapshot.labels or {}).get(k,k).split(' / ')]}
+    candidates=[]
+    for key in matching:
+        observed=[p for p in histories[key] if not p.estimated and
+                  (p.position_age is None or 0<=p.position_age<=5)]
+        if observed and 0<=now-observed[-1].time<=5:candidates.append(observed)
+    adsb=max(candidates,key=lambda ps:ps[-1].time) if candidates else []
+    stratux=[p for p in snapshot.ownship if 0<=now-p.time<=TRAIL_AGE]
+    if not stratux or now-stratux[-1].time>OWN_AGE:stratux=[]
+    if config['ownship_source']=='adsb-first':own,source=(adsb,'ADSB') if adsb else (stratux,'STRATUX GPS')
+    else:own,source=(stratux,'STRATUX GPS') if stratux else (adsb,'ADSB')
+    return {k:v for k,v in histories.items() if k not in matching},own,source
+
+
 def demo_snapshot(no_ownship=False):
     now = time.time()
     origin = (37.3, -121.9)
@@ -309,6 +326,8 @@ class Display:
         self.stop=threading.Event(); self.out=queue.Queue(maxsize=1)
         self.snapshot=Snapshot({},[])
         self.config=settings.load()
+        from fs_checks import write_problem
+        self.permission_issues=[issue for issue in (write_problem(settings.SETTINGS_PATH,atomic=True),write_problem(args.airports,atomic=True)) if issue]
         self.radius_nm=args.range if args.range is not None else self.config['default_range']
         self.last_touch=time.monotonic(); self.idle=False
         self.setup_panel=None; self.update_status=''
@@ -379,10 +398,7 @@ class Display:
                        not (self.selected or self.airport_selected or self.exit_pending or self.setup_panel))
         snap=self.snapshot
         histories=active_histories(snap.reports,now)
-        if self.config['own_tail']:
-            histories={k:ps for k,ps in histories.items() if self.config['own_tail'] not in
-                [(snap.labels or {}).get(k,k).upper().split(' / ')[0], (snap.labels or {}).get(k,k).upper().split(' / ')[-1]]}
-        own=[p for p in snap.ownship if 0<=now-p.time<=TRAIL_AGE]
+        histories,own,self.own_source=select_ownship(snap,histories,self.config,now)
         fix=own[-1] if own and now-own[-1].time<=OWN_AGE and not snap.error else None
         if fix:
             origin=(fix.lat,fix.lon);self.last_own=origin
@@ -406,7 +422,7 @@ class Display:
                 origin=None;mode='WAITING FOR POSITION DATA'
         own_heading=None if ov is None or math.hypot(*ov)<1e-10 else math.degrees(math.atan2(ov[0],ov[1]))%360
         self.map_heading=own_heading if self.config['orientation']=='track-up' and own_heading is not None else 0.0
-        if fix:mode='OWN GPS · '+('TRACK UP' if self.config['orientation']=='track-up' and own_heading is not None else 'NORTH UP')
+        if fix:mode=self.own_source+' · '+('TRACK UP' if self.config['orientation']=='track-up' and own_heading is not None else 'NORTH UP')
         for fraction in (0.25,0.5,0.75,1):
             r=radius*fraction
             c.create_oval(self.cx-r,self.cy-r,self.cx+r,self.cy+r,outline='#285449',width=1)
@@ -578,6 +594,8 @@ class Display:
             if message:
                 self.rect(195,365,605,435,fill='#071710',outline=YELLOW)
                 self.text(400,400,message,fill=YELLOW,size=16,width=390*self.unit)
+        if self.permission_issues:
+            self.text(400,620,'Write access needs attention · see Setup',fill=YELLOW,size=10,width=330*self.unit)
         if self.selected:
             self.details(infos.get(self.selected))
         if self.airport_selected:
@@ -700,7 +718,7 @@ class Display:
                 f'Range: {distance:.2f} NM '+('to ownship' if fix else 'to reference'),
                 f'Report age: {age:.1f} seconds']
             if fix and fix.altitude is not None:
-                lines.append(f'Ownship altitude: {fix.altitude:,.0f} ft · GPS')
+                lines.append(f'Ownship altitude: {fix.altitude:,.0f} ft · {self.own_source}')
             if cpa:
                 lines.append(f'Closest pass: {cpa[1]:.2f} NM in {cpa[0]/60:.1f} min')
             for i,line in enumerate(lines):
@@ -713,6 +731,8 @@ class Display:
         self.text(400,587,'Close',size=12)
 
     def open_setup(self):
+        from fs_checks import write_problem
+        self.permission_issues=[issue for issue in (write_problem(settings.SETTINGS_PATH,atomic=True),write_problem(self.args.airports,atomic=True)) if issue]
         self.setup_panel=setup_screen.Setup(self)
 
     def apply_settings(self,values):

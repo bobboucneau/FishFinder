@@ -16,43 +16,55 @@ class Setup:
     def __init__(self, display):
         self.display=display; self.jobs=queue.Queue(); self.closed=False; self.busy=False
         self.frame=tk.Frame(display.root,bg=BG,highlightbackground='#50ef97',highlightthickness=2)
-        self.frame.place(relx=.5,rely=.5,anchor='center',relwidth=.75,relheight=.90)
-        self.vars={}; self.focus=None; self.keyboard=None
-        tk.Label(self.frame,text='FishFinder setup',bg=BG,fg=FG,font=('DejaVu Sans',17)).pack(pady=8)
-        form=tk.Frame(self.frame,bg=BG); form.pack(fill='x',padx=18)
-        fields=[('stratux_ip','Stratux IP address'),('own_tail','Your tail number'),
-                ('default_range','Default range (NM)'),('orientation','Map orientation'),('ownship_symbol','Ownship airplane'),('vertical_threshold_ft','Gray beyond (ft)'),
-                ('idle_seconds','Hide labels after (sec; 0 = never)'),('horizon_minutes','Projection (minutes)'),
-                ('trail_seconds','Trail history (seconds)')]
+        self.frame.place(relx=.5,rely=.5,anchor='center',relwidth=.68,relheight=.68)
+        self.vars={};self.focus=None;self.keyboard=None;self.refresh_button=None
+        for key,value in display.config.items():
+            self.vars[key]=tk.BooleanVar(value=value) if isinstance(value,bool) else tk.StringVar(value=str(value))
+        tk.Label(self.frame,text='FishFinder setup',bg=BG,fg=FG,font=('DejaVu Sans',16)).pack(pady=5)
+        nav=tk.Frame(self.frame,bg=BG);nav.pack()
+        self.button(nav,'Display',lambda:self.show_page(0)).pack(side='left',padx=4)
+        self.button(nav,'Receiver / Updates',lambda:self.show_page(1)).pack(side='left',padx=4)
+        self.status=tk.StringVar(value='; '.join(getattr(display,'permission_issues',[])) or 'Changes apply when you tap Save.')
+        bottom=tk.Frame(self.frame,bg=BG);bottom.pack(side='bottom',pady=5)
+        self.button(bottom,'Cancel / Back',self.close).pack(side='left',padx=5)
+        self.button(bottom,'Save / Back',self.save).pack(side='left',padx=5)
+        tk.Label(self.frame,textvariable=self.status,bg=BG,fg='#ffd45c',wraplength=470,font=('DejaVu Sans',9)).pack(side='bottom',padx=8,pady=4)
+        self.page=tk.Frame(self.frame,bg=BG);self.page.pack(fill='both',expand=True,padx=12)
+        self.show_page(0);self.frame.after(250,self.poll)
+
+    def show_page(self,index):
+        if self.busy:self.status.set('Wait for the airport update before switching pages.');return
+        self.hide_keyboard();self.refresh_button=None
+        for child in self.page.winfo_children():child.destroy()
+        fields=([('default_range','Range (NM)'),('orientation','Map orientation'),('ownship_symbol','Ownship airplane'),
+                 ('horizon_minutes','Projection (minutes)'),('idle_seconds','Hide controls (seconds)'),('trail_seconds','Trail (seconds)')]
+                if index==0 else [('stratux_ip','Stratux IP'),('own_tail','Your tail number'),
+                                  ('ownship_source','Ownship preference'),('vertical_threshold_ft','Gray beyond (feet)')])
+        form=tk.Frame(self.page,bg=BG);form.pack()
+        choices={'default_range':('2','5','10','20'),'orientation':('track-up','north-up'),
+                 'ownship_symbol':('high-wing','low-wing','twin'),'ownship_source':('adsb-first','stratux-first')}
         for row,(key,label) in enumerate(fields):
             tk.Label(form,text=label,bg=BG,fg=FG,font=('DejaVu Sans',10)).grid(row=row,column=0,sticky='w',pady=2)
-            var=tk.StringVar(value=str(display.config[key]));self.vars[key]=var
-            if key in ('default_range','orientation','ownship_symbol'):
-                widget=ttk.Combobox(form,textvariable=var,values={'default_range':('2','5','10','20'),'orientation':('track-up','north-up'),'ownship_symbol':('high-wing','low-wing','twin')}[key],state='readonly',width=15)
+            if key in choices:widget=ttk.Combobox(form,textvariable=self.vars[key],values=choices[key],state='readonly',width=16)
             else:
-                widget=tk.Entry(form,textvariable=var,width=17,font=('DejaVu Sans',12))
+                widget=tk.Entry(form,textvariable=self.vars[key],width=16,font=('DejaVu Sans',11))
                 widget.bind('<Button-1>',lambda event,w=widget:self.show_keyboard(w))
-            widget.grid(row=row,column=1,padx=8,pady=2)
-        for key,label in [('vertical_filter','Use gray vertical-separation symbols'),('airports_visible','Show airports by default')]:
-            var=tk.BooleanVar(value=display.config[key]); self.vars[key]=var
-            tk.Checkbutton(self.frame,text=label,variable=var,bg=BG,fg=FG,selectcolor=BG,activebackground=BG,activeforeground=FG,borderwidth=0,highlightthickness=0,relief="flat",offrelief="flat").pack(anchor='w',padx=18)
-        controls=tk.Frame(self.frame,bg=BG);controls.pack(fill='x',padx=24,pady=9)
-        controls.grid_columnconfigure(0,weight=1,uniform='actions')
-        controls.grid_columnconfigure(1,weight=1,uniform='actions')
-        self.button(controls,'Wi-Fi / Internet',self.network).grid(row=0,column=0,padx=3,pady=3,sticky='ew')
-        self.refresh_button=self.button(controls,'Update airport data',self.refresh)
-        self.refresh_button.grid(row=0,column=1,padx=3,pady=3,sticky='ew')
-        self.button(controls,'Code updates',self.code_updates).grid(row=1,column=0,padx=3,pady=3,sticky='ew')
-        self.button(controls,'Restore defaults',self.defaults).grid(row=1,column=1,padx=3,pady=3,sticky='ew')
-        self.status=tk.StringVar(value='Connect to internet Wi-Fi before updating airports.\nReturn to Stratux Wi-Fi afterwards. Settings apply to both programs.')
-        tk.Label(self.frame,textvariable=self.status,bg=BG,fg='#ffd45c',wraplength=480,font=('DejaVu Sans',10)).pack(padx=12,pady=5)
-        bottom=tk.Frame(self.frame,bg=BG);bottom.pack(side='bottom',pady=12)
-        self.button(bottom,'Cancel / Back',self.close).pack(side='left',padx=8)
-        self.button(bottom,'Save / Back',self.save).pack(side='left',padx=8)
-        self.frame.after(250,self.poll)
+            widget.grid(row=row,column=1,padx=7,pady=2)
+        if index==0:
+            for key,label in [('vertical_filter','Gray vertically distant aircraft'),('airports_visible','Show airports')]:
+                tk.Checkbutton(self.page,text=label,variable=self.vars[key],bg=BG,fg=FG,selectcolor=BG,
+                               activebackground=BG,borderwidth=0,highlightthickness=0,relief='flat').pack(anchor='w',padx=12)
+        else:
+            controls=tk.Frame(self.page,bg=BG);controls.pack(fill='x',padx=6,pady=5)
+            for column in (0,1):controls.grid_columnconfigure(column,weight=1,uniform='actions')
+            self.button(controls,'Wi-Fi / Internet',self.network).grid(row=0,column=0,padx=3,pady=3,sticky='ew')
+            self.refresh_button=self.button(controls,'Update airports',self.refresh)
+            self.refresh_button.grid(row=0,column=1,padx=3,pady=3,sticky='ew')
+            self.button(controls,'Code updates',self.code_updates).grid(row=1,column=0,padx=3,pady=3,sticky='ew')
+            self.button(controls,'Restore defaults',self.defaults).grid(row=1,column=1,padx=3,pady=3,sticky='ew')
 
     def button(self,parent,label,command):
-        return tk.Button(parent,text=label,command=command,bg='#183b2d',fg=FG,font=('DejaVu Sans',11),padx=10,pady=9)
+        return tk.Button(parent,text=label,command=command,bg='#183b2d',fg=FG,font=('DejaVu Sans',11),padx=8,pady=6)
 
     def show_keyboard(self, entry):
         self.focus=entry
@@ -101,12 +113,12 @@ class Setup:
         if not command:
             self.status.set('NetworkManager nmcli is required to activate a saved Wi-Fi network.');return
         panel=tk.Frame(self.frame,bg=BG,highlightbackground=FG,highlightthickness=1)
-        panel.place(relx=.5,rely=.5,anchor='center',relwidth=.96,relheight=.85)
+        panel.place(relx=.5,rely=.5,anchor='center',relwidth=.96,relheight=.90)
         tk.Label(panel,text='Saved Wi-Fi networks',bg=BG,fg=FG,font=('DejaVu Sans',16)).pack(pady=10)
         message=tk.StringVar(value='Loading saved networks…')
         choices=tk.Listbox(panel,font=('DejaVu Sans',13),height=7,exportselection=False)
         choices.pack(fill='both',expand=True,padx=14,pady=8)
-        tk.Label(panel,textvariable=message,bg=BG,fg='#ffd45c',wraplength=420).pack(pady=8)
+        tk.Label(panel,textvariable=message,bg=BG,fg='#ffd45c',wraplength=430).pack(pady=8)
         results=queue.Queue();profiles=[]
         actions=tk.Frame(panel,bg=BG);actions.pack(pady=8)
         def task(args,kind):
@@ -171,7 +183,9 @@ class Setup:
         if self.closed:return
         try:
             success,message=self.jobs.get_nowait()
-            self.busy=False;self.refresh_button.configure(state='normal');self.status.set(message)
+            self.busy=False
+            if self.refresh_button:self.refresh_button.configure(state='normal')
+            self.status.set(message)
             if success:
                 self.display.catalog=AirportCatalog(self.display.args.airports)
                 self.display.airport_query=None;self.display.airport_selected=None
