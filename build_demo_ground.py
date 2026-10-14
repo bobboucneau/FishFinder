@@ -2,8 +2,8 @@
 
 Download geometry with the documented query, then:
 python3 build_demo_ground.py raw.json demo_ground.json
-Relations are drawn as shoreline segments, including inner boundaries; no filled
-polygons, so islands are not accidentally painted as water.
+Complete water boundaries are stitched and filled with even/odd island holes.
+Incomplete relations remain outline-only.
 """
 import argparse
 import json
@@ -31,6 +31,49 @@ def simplify(points,tolerance=.0006):
             keep.add(index);stack.extend(((lo,index),(index,hi)))
     return [points[i] for i in sorted(keep)]
 
+def join_rings(geometries):
+    """Join existing endpoints only; never invent edges across missing data."""
+    remaining=[]
+    for geometry in geometries:
+        coords=[[round(p['lat'],5),round(p['lon'],5)] for p in geometry if 'lat' in p and 'lon' in p]
+        if len(coords)<2:return None
+        remaining.append(coords)
+    rings=[]
+    while remaining:
+        ring=remaining.pop()
+        while ring[0]!=ring[-1]:
+            for i,part in enumerate(remaining):
+                if ring[-1]==part[0]:ring+=part[1:]
+                elif ring[-1]==part[-1]:ring+=part[-2::-1]
+                elif ring[0]==part[-1]:ring=part[:-1]+ring
+                elif ring[0]==part[0]:ring=part[:0:-1]+ring
+                else:continue
+                remaining.pop(i);break
+            else:return None
+        if len(ring)<4:return None
+        reduced=simplify(ring)
+        rings.append(reduced if len(reduced)>=4 else ring)
+    return rings
+
+
+def water_polygons(elements):
+    polygons=[]
+    members={m.get('ref') for e in elements if e['type']=='relation' and e.get('tags',{}).get('natural')=='water' for m in e.get('members',[]) if m.get('type')=='way'}
+    for e in elements:
+        if e.get('tags',{}).get('natural')!='water':continue
+        if e['type']=='way':
+            if e.get('id') in members:continue
+            rings=join_rings([e.get('geometry',[])])
+        else:
+            parts=e.get('members',[])
+            outer=join_rings([m.get('geometry',[]) for m in parts if m.get('type')=='way' and m.get('role') in ('outer','')])
+            inner=join_rings([m.get('geometry',[]) for m in parts if m.get('type')=='way' and m.get('role')=='inner'])
+            rings=outer+inner if outer and inner is not None else None
+        if not rings:continue
+        extent=max(max(p[0] for r in rings for p in r)-min(p[0] for r in rings for p in r),.788*(max(p[1] for r in rings for p in r)-min(p[1] for r in rings for p in r)))
+        if extent>=.008:polygons.append(rings)
+    return polygons
+
 def build(raw):
     if raw.get('remark'):raise ValueError(raw['remark'])
     paths=[];seen=set();original=0
@@ -50,7 +93,7 @@ def build(raw):
             seen.add(key);paths.append(dict(kind=kind,points=rounded))
     if not paths or not any(p['kind']=='water' for p in paths) or not any(p['kind']=='road' for p in paths):
         raise ValueError('Missing roads or water')
-    return dict(schema=1,bounds=BOUNDS,downloaded_utc=datetime.now(timezone.utc).isoformat(),source='OpenStreetMap via Overpass',attribution='© OpenStreetMap contributors',license='ODbL 1.0',license_url='https://www.openstreetmap.org/copyright',source_timestamp=raw.get('osm3s',{}).get('timestamp_osm_base'),original_vertices=original,paths=paths)
+    return dict(schema=2,water_polygons=water_polygons(raw['elements']),bounds=BOUNDS,downloaded_utc=datetime.now(timezone.utc).isoformat(),source='OpenStreetMap via Overpass',attribution='© OpenStreetMap contributors',license='ODbL 1.0',license_url='https://www.openstreetmap.org/copyright',source_timestamp=raw.get('osm3s',{}).get('timestamp_osm_base'),original_vertices=original,paths=paths)
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser();parser.add_argument('raw');parser.add_argument('output');args=parser.parse_args()

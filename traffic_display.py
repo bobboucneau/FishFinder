@@ -348,7 +348,9 @@ class Display:
         self.ground_level=1 if getattr(args,"demo_map",False) else 0
         self.ground=None
         self.ground_request_time=0.0
-        if getattr(args,"demo_map",False):self.ground=demo_ground.GroundLayer(self.stop,xy)
+        self.ground_image=None;self.ground_image_state=None;self.ground_seen=None;self.ground_image_time=0.0
+        self.ground_request_key=None
+        if getattr(args,"demo_map",False):self.ground=demo_ground.GroundLayer()
         if not args.demo:
             self.worker=threading.Thread(target=reader,args=(self.stop,self.out,args.db),daemon=True,name='database-reader')
             self.worker.start()
@@ -357,6 +359,7 @@ class Display:
 
     def close(self):
         self.stop.set()
+        if self.ground:self.ground.close()
         self.root.destroy()
 
     def text(self,x,y,text,fill=WHITE,size=12,**kwargs):
@@ -374,6 +377,30 @@ class Display:
             aa,bb=clipped
             self.canvas.create_line(self.cx+aa[0]*self.pixels,self.cy-aa[1]*self.pixels,
                 self.cx+bb[0]*self.pixels,self.cy-bb[1]*self.pixels,fill=color,**kwargs)
+
+    def trail_lines(self,points,color,uncertain=None,**kwargs):
+        """One Tk polyline per continuous style/run, rather than per report."""
+        points=[rotate(p,self.map_heading) for p in points]
+        batch=[];style=None
+        def flush():
+            if len(batch)<4:return
+            screen=[]
+            for i in range(0,len(batch),2):
+                screen.extend((self.cx+batch[i]*self.pixels,self.cy-batch[i+1]*self.pixels))
+            self.canvas.create_line(*screen,fill=ESTIMATED if style else color,width=2,
+                                    **({'dash':(3,4)} if style else {}),**kwargs)
+        for i,(a,b) in enumerate(zip(points,points[1:])):
+            newstyle=bool(uncertain and uncertain[i])
+            clipped=clip_segment(a,b,self.radius_nm)
+            if clipped is None:
+                flush();batch=[];style=None;continue
+            a,b=clipped
+            if batch and (style!=newstyle or math.dist(batch[-2:],a)>1e-8):
+                flush();batch=[]
+            style=newstyle
+            if not batch:batch.extend(a)
+            batch.extend(b)
+        flush()
 
     def tick(self):
         if self.args.demo:
@@ -428,6 +455,7 @@ class Display:
         own_heading=None if ov is None or math.hypot(*ov)<1e-10 else math.degrees(math.atan2(ov[0],ov[1]))%360
         self.map_heading=own_heading if self.config['orientation']=='track-up' and own_heading is not None else 0.0
         if fix:mode=self.own_source+' · '+('TRACK UP' if self.config['orientation']=='track-up' and own_heading is not None else 'NORTH UP')
+        if self.ground:self.ground.poll()
         ground_demo=snap.demo or bool(snap.receiver and snap.receiver[2].startswith("DEMO:"))
         if origin and ground_demo and self.ground and self.ground_level:
             self.draw_ground(origin)
@@ -484,8 +512,7 @@ class Display:
                 boxes.append(box)
         if origin:
             if fix:
-                for a,b in zip(own,own[1:]):
-                    self.line(xy(a.lat,a.lon,origin),xy(b.lat,b.lon,origin),WHITE,width=2,tags="ownship-trail")
+                self.trail_lines([xy(p.lat,p.lon,origin) for p in own],WHITE,tags="ownship-trail")
                 if ov is not None:
                     self.line((0,0),(ov[0]*self.projection_seconds,ov[1]*self.projection_seconds),WHITE,dash=(4,5),width=1,tags="ownship-projection")
                 # Original small aircraft silhouette, drawn above its trail/projection.
@@ -533,13 +560,13 @@ class Display:
                     outside+=1;continue
                 # Bound Tk canvas work while preserving the full stored history.
                 step=max(1,math.ceil(len(history)/90))
-                trail=history[::step]
-                if trail[-1]!=p:
-                    trail.append(p)
-                coords=[xy(q.lat,q.lon,origin) for q in trail]
-                for i,(a,b) in enumerate(zip(coords,coords[1:])):
-                    uncertain=any(q.estimated for q in history if trail[i].time<=q.time<=trail[i+1].time)
-                    self.line(a,b,ESTIMATED if uncertain else color,width=2,**({'dash':(3,4)} if uncertain else {}))
+                indices=list(range(0,len(history),step))
+                if indices[-1]!=len(history)-1:indices.append(len(history)-1)
+                trail=[history[i] for i in indices]
+                counts=[0]
+                for report in history:counts.append(counts[-1]+bool(report.estimated))
+                uncertain=[counts[b+1]>counts[a] for a,b in zip(indices,indices[1:])]
+                self.trail_lines([xy(q.lat,q.lon,origin) for q in trail],color,uncertain)
                 if tv is not None:
                     end=(pos[0]+tv[0]*self.projection_seconds,pos[1]+tv[1]*self.projection_seconds)
                     self.line(pos,end,ESTIMATED if p.estimated else color,dash=(5,4),width=1,arrow=tk.LAST)
@@ -608,7 +635,7 @@ class Display:
                 self.text(400,400,message,fill=YELLOW,size=16,width=390*self.unit)
         if self.ground and ground_demo and self.ground_level:
             self.text(400,603,'Ground reference experiment · © OpenStreetMap contributors',fill=MUTED,size=9,width=390*self.unit)
-            notice='Map unavailable' if self.ground.error else 'Map coverage partial' if origin and self.ground.bounds and not self.ground.covers(origin,self.radius_nm) else ''
+            notice='Map unavailable' if self.ground.error else 'Map loading...' if self.ground_image is None or time.monotonic()-self.ground_image_time>3 else 'Map coverage partial' if origin and self.ground.bounds and not self.ground.covers(origin,self.radius_nm) else ''
             if notice:self.text(400,585,notice,fill=MUTED,size=9)
         if self.permission_issues:
             self.text(400,620,'Write access needs attention · see Setup',fill=YELLOW,size=10,width=330*self.unit)
@@ -630,35 +657,28 @@ class Display:
         self.draw()
 
     def draw_ground(self,origin):
+        self.ground.poll()
+        size=max(64,min(512,round(398*self.unit)))
+        key=(self.radius_nm,self.ground_level,size)
+        state=(origin,self.map_heading,self.radius_nm,self.ground_level,size)
         now=time.monotonic()
-        if now-self.ground_request_time>=1:
-            self.ground.request(origin);self.ground_request_time=now
+        if key!=self.ground_request_key or now-self.ground_request_time>=1:
+            self.ground.request(state)
+            self.ground_request_key=key;self.ground_request_time=now
         result=self.ground.result
-        if result is None:return
-        old_origin,paths=result
-        shift=xy(*old_origin,origin)
-        colors={'road':'#273332','water':'#173843'} if self.ground_level==1 else {'road':'#475450','water':'#25556a'}
-        for kind,points in paths:
-            # Shift and rotate cached local geometry immediately with ownship.
-            # Worker periodically rebuilds exact geographic projection.
-            batch=[]
-            for a,b in zip(points,points[1:]):
-                aa=rotate((a[0]+shift[0],a[1]+shift[1]),self.map_heading)
-                bb=rotate((b[0]+shift[0],b[1]+shift[1]),self.map_heading)
-                clipped=clip_segment(aa,bb,self.radius_nm)
-                if clipped:
-                    first,last=clipped
-                    if batch and math.dist(batch[-2:],first)>1e-7:
-                        self.ground_line(batch,colors[kind]);batch=[]
-                    if not batch:batch.extend(first)
-                    batch.extend(last)
-                elif batch:self.ground_line(batch,colors[kind]);batch=[]
-            if batch:self.ground_line(batch,colors[kind])
-
-    def ground_line(self,coords,color):
-        screen=[]
-        for i in range(0,len(coords),2):screen.extend((self.cx+coords[i]*self.pixels,self.cy-coords[i+1]*self.pixels))
-        self.canvas.create_line(*screen,fill=color,width=1)
+        if result is not None and result is not self.ground_seen:
+            result_state,ppm=result
+            # Discard outdated zoom/brightness results instead of showing a wrong scale.
+            if result_state[2:]==state[2:]:
+                try:
+                    image=tk.PhotoImage(data=ppm,format='PPM').zoom(2,2)
+                except tk.TclError as exc:
+                    self.ground.error=str(exc);self.ground_level=0;return
+                self.ground_image=image;self.ground_image_state=result_state;self.ground_image_time=now
+            self.ground_seen=result
+        if self.ground_image is not None and self.ground_image_state[2:]==state[2:] and now-self.ground_image_time<=3:
+            # One image item per traffic frame; no map paths or pixel work in Tk.
+            self.canvas.create_image(self.cx,self.cy,image=self.ground_image)
 
     def toggle_airports(self):
         self.airports_visible=not self.airports_visible;self.draw()

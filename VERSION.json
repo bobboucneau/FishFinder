@@ -1,11 +1,11 @@
 {
-  "version": "0.4.7",
-  "change": "Optional bundled O22 roads/water demo experiment with Off/Low/Normal control; weather deferred",
+  "version": "0.4.8",
+  "change": "Move map rasterization outside GUI, cache one background image, fill complete water polygons, and batch aircraft trails",
   "files": {
     "COLLECTOR-NOTES.md": "8559bf93c9104426d951306f6ef1ec9aad114a820aa1c19abcdf40240faa7b65",
     "FishFinder.py": "bcad136b5709a0d620971965b776bea4e8c959cb49d8bafe02928151639c67dd",
     "PI-STARTUP.md": "c2d42db625b6796ebd0ea1b8d22cba2be27577f179e8d132967c51e8516f11ce",
-    "README.md": "0a1aee8d9111cb8e1a51fe61db35c1a7eaa59d15f5c43bedb0178e72e668cb00",
+    "README.md": "ce30dfa2b7e50033ea6ddb1d63b17b53d705a33fcfb8b55df87809dfdfc44a3b",
     "RELEASE-AND-MAPS.md": "99d2967d897411b742944b3b81eca2fe23a757fc3c77398f33c71869adc15ff4",
     "airport_data.py": "d2a1d762d26c4ad843822534eebd43f16e6c42ce739709fa8fd9e6748e45561a",
     "airports.json": "a983d199c9ca849e12382a35e67c96bde505e2db0ff9754255c0c8c4c0ee658c",
@@ -23,13 +23,13 @@
     "test_airports.py": "a53a6cd21072d091c7a7e10bf85e572f2a143019126789a8dbfe334943e4bd4f",
     "test_demo_traffic.py": "23b9f776863f2d9cbbb36e3061b097aad8efad24b6c608168d73dd2a7b4c1f4d",
     "test_settings_display.py": "1a4133ad1cdd79f8f289dc355e2deda07f234b8ebc485cb9344ff8b4f66b119c",
-    "traffic_display.py": "9c61a314d88a056c000208219b6247ae89a9b087366161dcfdc5a3bdebd3f2a8",
+    "traffic_display.py": "d8ab3161f09608842e131f867bd75e1a4ec904daeb2951fd89028292081d821f",
     "update_airports.py": "12431e4e4130c7408fe06aac626c831a2b549514a72ae5aa1accf37ff552d059",
-    "MAP-DEMO.md": "7a043aa5316278aab9bd3af63ff35dc73b6f1947ab8f200ca777e86557d85849",
-    "build_demo_ground.py": "122a01aeb4741703351027871d95c9de7dd7af30633a3ced90c80694b795060e",
-    "demo_ground.json": "902f290719e2361bff3bd29db2c09a35877083beda8457c120033561fd10f85e",
-    "demo_ground.py": "7cec8b43be5ec497e4f1f13de5f17cfd534d744eab78f25ead9ea2faef073eb7",
-    "test_demo_ground.py": "04b7785f3043e27292956a8fcd566128ebb9b1e10ed165c3f11423537bbaa747",
+    "MAP-DEMO.md": "6b5bde42623d175716b557fa9d813c0ecdb44b0ec64126328202f3618c2f2f91",
+    "build_demo_ground.py": "108a102dc99819688ed86c0c8bd270dc465c81020011137b2fcc1f74174e4736",
+    "demo_ground.json": "61e2bcc75a2270c6f1239b766f6f489faae7669338f1a02ecc02b40caf8e957f",
+    "demo_ground.py": "e8b1decdd4572230a6178dbc8ea435a337283d3bd40a41082fb2cdfdbee864ee",
+    "test_demo_ground.py": "fb0806aeb7ba47f7c71083827bcb2b86c2a1008a943c8ae029a91a74b77d746d",
     "map-source/o22-overpass-2026-10-14.json.gz": "d955b2ba513184e9b2d809cd2f3f12b2fded292fa3757b8da0b0ec7717987453"
   }
 }
