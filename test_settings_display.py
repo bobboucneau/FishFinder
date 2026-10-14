@@ -23,6 +23,26 @@ except ModuleNotFoundError as exc:
 
 
 class Tests(unittest.TestCase):
+    def test_wake_then_range_and_exit_touch_actions(self):
+        obj=gui();obj.touch_debug=True
+        from io import StringIO
+        log=StringIO()
+        obj.last_touch=time.monotonic()-20;obj.draw()
+        with patch('sys.stdout',log):
+            obj.tap(SimpleNamespace(x=269,y=721))
+            self.assertFalse(obj.idle);self.assertEqual(obj.radius_nm,10)
+            obj.tap(SimpleNamespace(x=269,y=721))
+            self.assertEqual(obj.radius_nm,2)
+            obj.tap(SimpleNamespace(x=400,y=770));self.assertTrue(obj.exit_pending)
+            obj.tap(SimpleNamespace(x=318,y=460));self.assertFalse(obj.exit_pending)
+            obj.tap(SimpleNamespace(x=400,y=770))
+            with patch.object(obj,'close') as close:
+                obj.tap(SimpleNamespace(x=482,y=460));close.assert_called_once()
+        self.assertIn('canvas=800x800',log.getvalue())
+        self.assertIn('TOUCH ACTION',log.getvalue())
+        self.assertEqual(obj.touch_mark[:2],(482,460))
+        obj.stop.set()
+
     def test_settings_validation_and_atomic_persistence(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'settings.json'

@@ -10,6 +10,7 @@ import settings
 import demo_ground
 import setup_screen
 import math
+import os
 import queue
 import sqlite3
 import threading
@@ -331,6 +332,8 @@ class Display:
         self.permission_issues=[issue for issue in (write_problem(settings.SETTINGS_PATH,atomic=True),write_problem(args.airports,atomic=True)) if issue]
         self.radius_nm=args.range if args.range is not None else self.config['default_range']
         self.last_touch=time.monotonic(); self.idle=False
+        self.touch_debug=getattr(args,"touch_debug",False);self.touch_mark=None
+        if self.touch_debug:print(f"TOUCH DEBUG script={Path(__file__).resolve()} DISPLAY={os.environ.get('DISPLAY','')} requested_geometry={args.geometry}",flush=True)
         self.setup_panel=None; self.update_status=''
         global TRAIL_AGE
         self.projection_seconds=self.config['horizon_minutes']*60
@@ -643,6 +646,10 @@ class Display:
             self.details(infos.get(self.selected))
         if self.airport_selected:
             self.airport_details()
+        if self.touch_debug and self.touch_mark and time.monotonic()-self.touch_mark[2]<3:
+            tx,ty,_=self.touch_mark
+            c.create_oval(tx-5,ty-5,tx+5,ty+5,outline='#ff88ff',width=2)
+            self.text(400,655,f'Touch received at {tx}, {ty}',fill='#ff88ff',size=10)
         if self.exit_pending:
             self.rect(210,285,590,515,fill='#071710',outline=WHITE,width=2)
             self.text(400,326,'Close traffic display?',size=19)
@@ -813,7 +820,21 @@ class Display:
         self.projection_seconds=self.config['horizon_minutes']*60; TRAIL_AGE=self.config['trail_seconds']
         self.last_touch=time.monotonic(); self.draw()
 
+    def trace_touch(self,event):
+        if not self.touch_debug:return
+        self.touch_mark=(event.x,event.y,time.monotonic())
+        cx=getattr(self,"cx",self.canvas.winfo_width()/2);cy=getattr(self,"cy",self.canvas.winfo_height()/2)
+        unit=getattr(self,"unit",max(.1,min(self.canvas.winfo_width(),self.canvas.winfo_height())/800))
+        x=(event.x-cx)/unit+400;y=(event.y-cy)/unit+400
+        matches=[getattr(action,'__name__','button') for x1,y1,x2,y2,action in self.buttons if x1<=x<=x2 and y1<=y<=y2]
+        print(f"TOUCH pixel=({event.x},{event.y}) logical=({x:.1f},{y:.1f}) "
+              f"root=({getattr(event,'x_root','?')},{getattr(event,'y_root','?')}) "
+              f"canvas={self.canvas.winfo_width()}x{self.canvas.winfo_height()} "
+              f"idle={self.idle} buttons={len(self.buttons)} match={','.join(matches) or '-'} "
+              f"exit={self.exit_pending} target={self.selected} airport={self.airport_selected}",flush=True)
+
     def tap(self,event):
+        self.trace_touch(event)
         if time.monotonic()<self.splash_until:
             self.splash_until=0;self.last_touch=time.monotonic();self.draw();return
         self.last_touch=time.monotonic()
@@ -840,6 +861,7 @@ class Display:
             return
         for x1,y1,x2,y2,action in self.buttons:
             if x1<=x<=x2 and y1<=y<=y2:
+                if self.touch_debug:print(f"TOUCH ACTION {getattr(action,'__name__','button')}",flush=True)
                 action();return
         if self.hits:
             hx,hy,tail=min(self.hits,key=lambda item:math.hypot(event.x-item[0],event.y-item[1]))
@@ -862,6 +884,7 @@ def main():
     demo_options.add_argument('--demo',action='store_true',help='Read the moving collector demo database')
     demo_options.add_argument('--sample-demo',action='store_true',help='Legacy display-only fixed sample targets')
     parser.add_argument('--demo-map',action='store_true',help='Optional bundled O22 roads/water experiment; demo only')
+    parser.add_argument('--touch-debug',action='store_true',help='Print received touch coordinates/actions and show a temporary touch marker')
     parser.add_argument('--no-ownship',action='store_true',help='Demo without an ownship fix')
     parser.add_argument('--range',type=int,choices=(2,5,10,20),default=None)
     parser.add_argument('--splash-seconds',type=float,default=3,help='Startup splash duration; 0 disables, tap dismisses')

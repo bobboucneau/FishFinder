@@ -1,11 +1,11 @@
 {
-  "version": "0.4.8",
-  "change": "Move map rasterization outside GUI, cache one background image, fill complete water polygons, and batch aircraft trails",
+  "version": "0.4.9",
+  "change": "Repair DSI demo launcher mapping/geometry and add optional received-touch diagnostics",
   "files": {
     "COLLECTOR-NOTES.md": "8559bf93c9104426d951306f6ef1ec9aad114a820aa1c19abcdf40240faa7b65",
     "FishFinder.py": "bcad136b5709a0d620971965b776bea4e8c959cb49d8bafe02928151639c67dd",
     "PI-STARTUP.md": "c2d42db625b6796ebd0ea1b8d22cba2be27577f179e8d132967c51e8516f11ce",
-    "README.md": "ce30dfa2b7e50033ea6ddb1d63b17b53d705a33fcfb8b55df87809dfdfc44a3b",
+    "README.md": "92f2cbb79fbbe32689bced72da43f54f869d878685695dfe254973db65b392c6",
     "RELEASE-AND-MAPS.md": "99d2967d897411b742944b3b81eca2fe23a757fc3c77398f33c71869adc15ff4",
     "airport_data.py": "d2a1d762d26c4ad843822534eebd43f16e6c42ce739709fa8fd9e6748e45561a",
     "airports.json": "a983d199c9ca849e12382a35e67c96bde505e2db0ff9754255c0c8c4c0ee658c",
@@ -22,14 +22,17 @@
     "setup_screen.py": "e630af5d7c691155b97fca336eb4873b0fdd2dbbc84da2fcc248efa7c8d89b9e",
     "test_airports.py": "a53a6cd21072d091c7a7e10bf85e572f2a143019126789a8dbfe334943e4bd4f",
     "test_demo_traffic.py": "23b9f776863f2d9cbbb36e3061b097aad8efad24b6c608168d73dd2a7b4c1f4d",
-    "test_settings_display.py": "1a4133ad1cdd79f8f289dc355e2deda07f234b8ebc485cb9344ff8b4f66b119c",
-    "traffic_display.py": "d8ab3161f09608842e131f867bd75e1a4ec904daeb2951fd89028292081d821f",
+    "test_settings_display.py": "25a9c72a0e49951ba4146ec5a5418070ac7575bd961b99242bbbc1bafce09e5e",
+    "traffic_display.py": "283e0be81fa90c56d09ab57f23357e644730fb162565d1302749fe0cf92dab82",
     "update_airports.py": "12431e4e4130c7408fe06aac626c831a2b549514a72ae5aa1accf37ff552d059",
     "MAP-DEMO.md": "6b5bde42623d175716b557fa9d813c0ecdb44b0ec64126328202f3618c2f2f91",
     "build_demo_ground.py": "108a102dc99819688ed86c0c8bd270dc465c81020011137b2fcc1f74174e4736",
     "demo_ground.json": "61e2bcc75a2270c6f1239b766f6f489faae7669338f1a02ecc02b40caf8e957f",
     "demo_ground.py": "e8b1decdd4572230a6178dbc8ea435a337283d3bd40a41082fb2cdfdbee864ee",
     "test_demo_ground.py": "fb0806aeb7ba47f7c71083827bcb2b86c2a1008a943c8ae029a91a74b77d746d",
-    "map-source/o22-overpass-2026-10-14.json.gz": "d955b2ba513184e9b2d809cd2f3f12b2fded292fa3757b8da0b0ec7717987453"
+    "map-source/o22-overpass-2026-10-14.json.gz": "d955b2ba513184e9b2d809cd2f3f12b2fded292fa3757b8da0b0ec7717987453",
+    "DemoDisplay.bash": "b5f7499d014aae2167f661bf1e33ee6b15388a31b7d8101befefb74e7669a2fe",
+    "TOUCH-TROUBLESHOOTING.md": "114327cf53f59b1b492dcbbe3e58e18d44b04a1d5dfc29e11e21b2e40c4b4fdb",
+    "test_demo_launcher.py": "3f469952f63aa0ff720fb8daa5644f9b7e141f24daf0844ea709827ab1f04be7"
   }
 }

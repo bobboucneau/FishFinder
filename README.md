@@ -1,3 +1,5 @@
+v0.4.9 adds a corrected DSI demo launcher and optional touch diagnostics: see [TOUCH-TROUBLESHOOTING.md](TOUCH-TROUBLESHOOTING.md).
+
 Optional v0.4.8 O22 cached roads/filled-water experiment: see [MAP-DEMO.md](MAP-DEMO.md). Launch the display with `--demo --demo-map`; normal receiver use is unchanged.
 
 # FishFinder v0.4.6 — display, settings and connection recovery
