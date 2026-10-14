@@ -348,12 +348,15 @@ class Display:
         self.map_heading=0.0
         self.worker=None
         self.demo_initialized=False
-        self.ground_level=1 if getattr(args,"demo_map",False) else 0
+        # First-time CLI opt-in preserves the old demo-map launch behavior.
+        # Once saved in Setup, the user's on/off preference wins on restart.
+        if getattr(args,"demo_map",False) and not settings.explicit('ground_map'):
+            self.config['ground_map']=True
+        self.ground_level=1 if self.config['ground_map'] else 0
         self.ground=None
         self.ground_request_time=0.0
         self.ground_image=None;self.ground_image_state=None;self.ground_seen=None;self.ground_image_time=0.0
         self.ground_request_key=None
-        if getattr(args,"demo_map",False):self.ground=demo_ground.GroundLayer()
         if not args.demo:
             self.worker=threading.Thread(target=reader,args=(self.stop,self.out,args.db),daemon=True,name='database-reader')
             self.worker.start()
@@ -460,6 +463,8 @@ class Display:
         if fix:mode=self.own_source+' · '+('TRACK UP' if self.config['orientation']=='track-up' and own_heading is not None else 'NORTH UP')
         if self.ground:self.ground.poll()
         ground_demo=snap.demo or bool(snap.receiver and snap.receiver[2].startswith("DEMO:"))
+        if ground_demo and self.ground_level and self.ground is None:
+            self.ground=demo_ground.GroundLayer()
         if origin and ground_demo and self.ground and self.ground_level:
             self.draw_ground(origin)
         for fraction in (0.25,0.5,0.75,1):
@@ -661,6 +666,7 @@ class Display:
 
     def cycle_ground(self):
         self.ground_level=(self.ground_level+1)%3
+        self.config["ground_map"]=bool(self.ground_level)
         self.draw()
 
     def draw_ground(self,origin):
@@ -814,7 +820,14 @@ class Display:
         self.setup_panel=setup_screen.Setup(self)
 
     def apply_settings(self,values):
+        previous_map=self.config['ground_map']
         self.config=settings.save(values)
+        if self.config['ground_map']!=previous_map or not self.config['ground_map']:
+            self.ground_level=1 if self.config['ground_map'] else 0
+            if not self.config['ground_map'] and self.ground:
+                self.ground.close();self.ground=None
+                self.ground_image=None;self.ground_seen=None
+                self.ground_request_key=None
         self.radius_nm=self.config['default_range']; self.airports_visible=self.config['airports_visible']
         global TRAIL_AGE
         self.projection_seconds=self.config['horizon_minutes']*60; TRAIL_AGE=self.config['trail_seconds']

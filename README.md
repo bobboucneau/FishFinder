@@ -1,3 +1,5 @@
+v0.4.10 adds a saved ground-map checkbox in Setup → Display. The current bundled map remains an O22 demo experiment.
+
 v0.4.9 adds a corrected DSI demo launcher and optional touch diagnostics: see [TOUCH-TROUBLESHOOTING.md](TOUCH-TROUBLESHOOTING.md).
 
 Optional v0.4.8 O22 cached roads/filled-water experiment: see [MAP-DEMO.md](MAP-DEMO.md). Launch the display with `--demo --demo-map`; normal receiver use is unchanged.

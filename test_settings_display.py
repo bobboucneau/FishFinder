@@ -43,6 +43,28 @@ class Tests(unittest.TestCase):
         self.assertEqual(obj.touch_mark[:2],(482,460))
         obj.stop.set()
 
+    def test_ground_map_preference_saved_and_applied(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path=Path(tmp)/'settings.json'
+            self.assertFalse(settings.explicit('ground_map',path))
+            settings.save(dict(ground_map=True),path)
+            self.assertTrue(settings.load(path)['ground_map'])
+            self.assertTrue(settings.explicit('ground_map',path))
+            settings.save(dict(ground_map=False),path)
+            self.assertFalse(settings.load(path)['ground_map'])
+            with self.assertRaises(ValueError):settings.validate(dict(ground_map='off'))
+        obj=gui();obj.config['ground_map']=True;obj.ground_level=1
+        renderer=SimpleNamespace(close=lambda:None,poll=lambda:None,request=lambda state:None,result=None,error="",bounds=None)
+        obj.ground=renderer
+        with patch.object(settings,'save',side_effect=lambda values:settings.validate(values)):
+            obj.apply_settings(dict(obj.config,ground_map=False))
+            self.assertIsNone(obj.ground);self.assertEqual(obj.ground_level,0)
+            # Enable from Setup without a --demo-map launch flag; start lazily in demo draw.
+            with patch.object(d.demo_ground,'GroundLayer',return_value=renderer) as start:
+                obj.apply_settings(dict(obj.config,ground_map=True))
+                start.assert_called_once();self.assertEqual(obj.ground_level,1)
+        obj.stop.set()
+
     def test_settings_validation_and_atomic_persistence(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'settings.json'

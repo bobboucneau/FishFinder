@@ -1,4 +1,4 @@
-# O22 ground-reference experiment — v0.4.8
+# O22 ground-reference experiment — v0.4.10
 
 Optional, bundled, offline experiment. No region selector or network access on the Pi. No weather display is implemented.
 
@@ -11,7 +11,7 @@ Install the full package, then start the moving demo collector and display in se
 /usr/local/Fishfinder/.venv/bin/python3 /usr/local/Fishfinder/traffic_display.py --demo --demo-map --fullscreen
 ```
 
-Use the Map button below Setup to cycle LOW → NORMAL → OFF. Touch to wake hidden controls as usual. The preference is temporary and resets to LOW on the next --demo-map launch. Omit --demo-map to restore the black background. --demo-map requires the moving --demo, not the old --sample-demo. A receiver/database identified as live never renders this experiment. Trail batching applies to live and demo displays.
+Setup → Display now includes “Show ground map (demo experiment)”. Tap Save to remember on/off across launches. Turning it off stops the renderer process. Turning it on starts the bundled O22 background in demo mode, even without --demo-map. Restore defaults turns it off. The main Map button still cycles LOW → NORMAL → OFF for the current session; its brightness level is not saved. A first --demo-map launch opts in to LOW only when the on/off preference has not yet been saved; afterward the saved preference wins. Touch to wake hidden controls as usual. --demo-map requires the moving --demo, not the old --sample-demo. A receiver/database identified as live never renders this experiment or starts its renderer, even if the map preference is enabled. Trail batching applies to live and demo displays.
 
 Major roads, river lines, and lake/reservoir outlines around O22. Complete water boundaries now have dark blue fill; islands are preserved using an even/odd fill rule. Member fragments are joined only at matching endpoints. Incomplete boundaries remain outlines; no invented closing edge or synthetic water area. Tiny closed ponds are omitted. No road names, buildings, railways, terrain, or aviation-chart content. General orientation only: data completeness and positions are not independently verified.
 
