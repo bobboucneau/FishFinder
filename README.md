@@ -1,3 +1,5 @@
+Optional v0.4.7 O22 roads/water experiment: see [MAP-DEMO.md](MAP-DEMO.md). Launch the display with `--demo --demo-map`; normal receiver use is unchanged.
+
 # FishFinder v0.4.6 — display, settings and connection recovery
 
 This is a new testing package. v0.2.1 and the working baseline are preserved.

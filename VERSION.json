@@ -1,11 +1,11 @@
 {
-  "version": "0.4.6",
-  "change": "Fit two-page Setup to round screen, preflight writable data paths, and select fresh configured-tail ADS-B ownship with GPS fallback",
+  "version": "0.4.7",
+  "change": "Optional bundled O22 roads/water demo experiment with Off/Low/Normal control; weather deferred",
   "files": {
     "COLLECTOR-NOTES.md": "8559bf93c9104426d951306f6ef1ec9aad114a820aa1c19abcdf40240faa7b65",
     "FishFinder.py": "bcad136b5709a0d620971965b776bea4e8c959cb49d8bafe02928151639c67dd",
     "PI-STARTUP.md": "c2d42db625b6796ebd0ea1b8d22cba2be27577f179e8d132967c51e8516f11ce",
-    "README.md": "620d17d0537f29a4e081f6793b32153db3df452a42af730a9bd9a406a45345a3",
+    "README.md": "0a1aee8d9111cb8e1a51fe61db35c1a7eaa59d15f5c43bedb0178e72e668cb00",
     "RELEASE-AND-MAPS.md": "99d2967d897411b742944b3b81eca2fe23a757fc3c77398f33c71869adc15ff4",
     "airport_data.py": "d2a1d762d26c4ad843822534eebd43f16e6c42ce739709fa8fd9e6748e45561a",
     "airports.json": "a983d199c9ca849e12382a35e67c96bde505e2db0ff9754255c0c8c4c0ee658c",
@@ -23,7 +23,13 @@
     "test_airports.py": "a53a6cd21072d091c7a7e10bf85e572f2a143019126789a8dbfe334943e4bd4f",
     "test_demo_traffic.py": "23b9f776863f2d9cbbb36e3061b097aad8efad24b6c608168d73dd2a7b4c1f4d",
     "test_settings_display.py": "1a4133ad1cdd79f8f289dc355e2deda07f234b8ebc485cb9344ff8b4f66b119c",
-    "traffic_display.py": "fe398ccf990c6ec2b377fef64a833d7febd855b1badce39122c17ceccb027738",
-    "update_airports.py": "12431e4e4130c7408fe06aac626c831a2b549514a72ae5aa1accf37ff552d059"
+    "traffic_display.py": "9c61a314d88a056c000208219b6247ae89a9b087366161dcfdc5a3bdebd3f2a8",
+    "update_airports.py": "12431e4e4130c7408fe06aac626c831a2b549514a72ae5aa1accf37ff552d059",
+    "MAP-DEMO.md": "7a043aa5316278aab9bd3af63ff35dc73b6f1947ab8f200ca777e86557d85849",
+    "build_demo_ground.py": "122a01aeb4741703351027871d95c9de7dd7af30633a3ced90c80694b795060e",
+    "demo_ground.json": "902f290719e2361bff3bd29db2c09a35877083beda8457c120033561fd10f85e",
+    "demo_ground.py": "7cec8b43be5ec497e4f1f13de5f17cfd534d744eab78f25ead9ea2faef073eb7",
+    "test_demo_ground.py": "04b7785f3043e27292956a8fcd566128ebb9b1e10ed165c3f11423537bbaa747",
+    "map-source/o22-overpass-2026-10-14.json.gz": "d955b2ba513184e9b2d809cd2f3f12b2fded292fa3757b8da0b0ec7717987453"
   }
 }

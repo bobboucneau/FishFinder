@@ -7,6 +7,7 @@ All GUI operations stay on Tk's main thread; database reads run separately.
 """
 import argparse
 import settings
+import demo_ground
 import setup_screen
 import math
 import queue
@@ -344,6 +345,10 @@ class Display:
         self.map_heading=0.0
         self.worker=None
         self.demo_initialized=False
+        self.ground_level=1 if getattr(args,"demo_map",False) else 0
+        self.ground=None
+        self.ground_request_time=0.0
+        if getattr(args,"demo_map",False):self.ground=demo_ground.GroundLayer(self.stop,xy)
         if not args.demo:
             self.worker=threading.Thread(target=reader,args=(self.stop,self.out,args.db),daemon=True,name='database-reader')
             self.worker.start()
@@ -423,6 +428,9 @@ class Display:
         own_heading=None if ov is None or math.hypot(*ov)<1e-10 else math.degrees(math.atan2(ov[0],ov[1]))%360
         self.map_heading=own_heading if self.config['orientation']=='track-up' and own_heading is not None else 0.0
         if fix:mode=self.own_source+' · '+('TRACK UP' if self.config['orientation']=='track-up' and own_heading is not None else 'NORTH UP')
+        ground_demo=snap.demo or bool(snap.receiver and snap.receiver[2].startswith("DEMO:"))
+        if origin and ground_demo and self.ground and self.ground_level:
+            self.draw_ground(origin)
         for fraction in (0.25,0.5,0.75,1):
             r=radius*fraction
             c.create_oval(self.cx-r,self.cy-r,self.cx+r,self.cy+r,outline='#285449',width=1)
@@ -555,6 +563,10 @@ class Display:
         airport_status='Airports unavailable' if self.catalog.error else 'Airports ON' if self.airports_visible else 'Airports OFF'
         self.text(400,171,airport_status,fill=BLUE,size=10)
         self.buttons.append((318,158,482,185,self.toggle_airports))
+        if self.ground and ground_demo:
+            self.rect(318,226,482,257,fill='#10251f',outline='#345247')
+            self.text(400,242,'Map '+('OFF','LOW','NORMAL')[self.ground_level],size=11)
+            self.buttons.append((318,226,482,257,self.cycle_ground))
         if snap.error:
             self.text(400,450,'DATABASE UNAVAILABLE',fill=RED,size=15)
             self.text(400,476,snap.error,fill=MUTED,size=10,width=380*self.unit)
@@ -594,6 +606,10 @@ class Display:
             if message:
                 self.rect(195,365,605,435,fill='#071710',outline=YELLOW)
                 self.text(400,400,message,fill=YELLOW,size=16,width=390*self.unit)
+        if self.ground and ground_demo and self.ground_level:
+            self.text(400,603,'Ground reference experiment · © OpenStreetMap contributors',fill=MUTED,size=9,width=390*self.unit)
+            notice='Map unavailable' if self.ground.error else 'Map coverage partial' if origin and self.ground.bounds and not self.ground.covers(origin,self.radius_nm) else ''
+            if notice:self.text(400,585,notice,fill=MUTED,size=9)
         if self.permission_issues:
             self.text(400,620,'Write access needs attention · see Setup',fill=YELLOW,size=10,width=330*self.unit)
         if self.selected:
@@ -608,6 +624,41 @@ class Display:
             self.text(318,460,'Cancel',size=14)
             self.rect(410,435,555,485,fill='#3b181b',outline=RED,width=2)
             self.text(482,460,'Exit',size=14)
+
+    def cycle_ground(self):
+        self.ground_level=(self.ground_level+1)%3
+        self.draw()
+
+    def draw_ground(self,origin):
+        now=time.monotonic()
+        if now-self.ground_request_time>=1:
+            self.ground.request(origin);self.ground_request_time=now
+        result=self.ground.result
+        if result is None:return
+        old_origin,paths=result
+        shift=xy(*old_origin,origin)
+        colors={'road':'#273332','water':'#173843'} if self.ground_level==1 else {'road':'#475450','water':'#25556a'}
+        for kind,points in paths:
+            # Shift and rotate cached local geometry immediately with ownship.
+            # Worker periodically rebuilds exact geographic projection.
+            batch=[]
+            for a,b in zip(points,points[1:]):
+                aa=rotate((a[0]+shift[0],a[1]+shift[1]),self.map_heading)
+                bb=rotate((b[0]+shift[0],b[1]+shift[1]),self.map_heading)
+                clipped=clip_segment(aa,bb,self.radius_nm)
+                if clipped:
+                    first,last=clipped
+                    if batch and math.dist(batch[-2:],first)>1e-7:
+                        self.ground_line(batch,colors[kind]);batch=[]
+                    if not batch:batch.extend(first)
+                    batch.extend(last)
+                elif batch:self.ground_line(batch,colors[kind]);batch=[]
+            if batch:self.ground_line(batch,colors[kind])
+
+    def ground_line(self,coords,color):
+        screen=[]
+        for i in range(0,len(coords),2):screen.extend((self.cx+coords[i]*self.pixels,self.cy-coords[i+1]*self.pixels))
+        self.canvas.create_line(*screen,fill=color,width=1)
 
     def toggle_airports(self):
         self.airports_visible=not self.airports_visible;self.draw()
@@ -790,10 +841,12 @@ def main():
     demo_options=parser.add_mutually_exclusive_group()
     demo_options.add_argument('--demo',action='store_true',help='Read the moving collector demo database')
     demo_options.add_argument('--sample-demo',action='store_true',help='Legacy display-only fixed sample targets')
+    parser.add_argument('--demo-map',action='store_true',help='Optional bundled O22 roads/water experiment; demo only')
     parser.add_argument('--no-ownship',action='store_true',help='Demo without an ownship fix')
     parser.add_argument('--range',type=int,choices=(2,5,10,20),default=None)
     parser.add_argument('--splash-seconds',type=float,default=3,help='Startup splash duration; 0 disables, tap dismisses')
     args=parser.parse_args()
+    if args.demo_map and not args.demo:parser.error("--demo-map requires the moving --demo")
     if not math.isfinite(args.splash_seconds) or args.splash_seconds<0:parser.error('Splash duration must be finite and nonnegative')
     if args.demo and args.db=='/var/local/FishFinder/flying_objects.db':
         args.db='/var/local/FishFinder/demo_objects.db'
