@@ -1,3 +1,5 @@
+For the current version-folder installation, Finder/DemoFinder launchers, and explicit demo/production commands, start with [SERVICES.md](SERVICES.md). The instructions below also cover the older flat app layout and optional automatic X startup.
+
 # Raspberry Pi collector service and console display
 
 Run applications as the same normal Pi user you tested manually. The installer runs as root only to register systemd files. It does not install packages, copy application code, change networking, or start X on this Mac.

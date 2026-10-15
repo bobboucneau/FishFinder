@@ -1,3 +1,5 @@
+v0.4.11 adds Display.bash, Finder.bash and DemoFinder.bash plus version-folder-aware service installation. See [SERVICES.md](SERVICES.md).
+
 v0.4.10 adds a saved ground-map checkbox in Setup → Display. The current bundled map remains an O22 demo experiment.
 
 v0.4.9 adds a corrected DSI demo launcher and optional touch diagnostics: see [TOUCH-TROUBLESHOOTING.md](TOUCH-TROUBLESHOOTING.md).

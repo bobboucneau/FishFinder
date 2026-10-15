@@ -13,14 +13,21 @@ SERVICE='fishfinder-collector.service'
 MARKER='# FishFinder console startup'
 
 
-def files_for(user, home, app, database, demo=False, boot_ui=False):
-    python=app/'.venv/bin/python3'
-    command=[str(python),'-u',str(app/'FishFinder.py'),'--db',str(database)]
-    if demo:command.append('--demo')
+def find_python(app,override=None):
+    if override is not None:return Path(os.path.abspath(override))
+    candidates=[app/'.venv/bin/python3',app.parent/'.venv/bin/python3',
+                Path('/usr/local/FishFinder/.venv/bin/python3'),Path('/usr/local/Fishfinder/.venv/bin/python3')]
+    return next((p for p in candidates if p.is_file() and os.access(p,os.X_OK)),candidates[0])
+
+
+def files_for(user, home, app, database, demo=False, boot_ui=False, python=None):
+    python=python or app/'.venv/bin/python3'
+    launcher=app/('DemoFinder.bash' if demo else 'Finder.bash')
+    command=['/bin/bash',str(launcher)]
     # systemd command-line quoting differs from shell expansion.
     def systemd(value):return '"'+str(value).replace('\\','\\\\').replace('"','\\"').replace('%','%%')+'"'
     unit=f'''[Unit]
-Description=FishFinder traffic collector
+Description=FishFinder traffic collector ({'demo' if demo else 'production'})
 After=network.target
 StartLimitIntervalSec=0
 
@@ -29,9 +36,13 @@ Type=simple
 User={user}
 WorkingDirectory={systemd(app)}
 Environment={systemd('FISHFINDER_SETTINGS='+str(app/'settings.json'))}
+Environment={systemd('FISHFINDER_PYTHON='+str(python))}
+Environment={systemd('FISHFINDER_DATABASE='+str(database))}
+Environment={systemd('FISHFINDER_LOCK_FILE='+str(database.parent/'collector.lock'))}
 ExecStart={' '.join(systemd(x) for x in command)}
 Restart=always
 RestartSec=5
+RestartPreventExitStatus=75
 KillSignal=SIGINT
 TimeoutStopSec=20
 StandardOutput=journal
@@ -87,13 +98,15 @@ def main():
     parser.add_argument('--boot-ui',action='store_true',help='Also enable tty1 autologin and startx at console login')
     parser.add_argument('--demo',action='store_true',help='Install collector/display in simulation mode for bench testing')
     parser.add_argument('--user',default=os.environ.get('SUDO_USER') or pwd.getpwuid(os.getuid()).pw_name)
+    parser.add_argument('--python',type=Path,help='Virtual-environment interpreter; otherwise detect inside/beside app directory')
     parser.add_argument('--app-dir',type=Path,default=Path('/usr/local/Fishfinder'))
     args=parser.parse_args();account=pwd.getpwnam(args.user)
     if account.pw_uid==0:parser.error('Choose the normal Pi user with --user; applications must not run as root')
     if account.pw_shell.endswith(('nologin','false')):parser.error('Choose an interactive login user')
     home=Path(account.pw_dir);app=args.app_dir.resolve()
     database=Path('/var/local/FishFinder')/('demo_objects.db' if args.demo else 'flying_objects.db')
-    files=files_for(args.user,home,app,database,args.demo,args.boot_ui)
+    python=find_python(app,args.python)
+    files=files_for(args.user,home,app,database,args.demo,args.boot_ui,python)
     login=next((home/n for n in ('.bash_profile','.bash_login','.profile') if (home/n).exists()),home/'.profile')
     source='\n'+MARKER+'\n. "$HOME/.config/fishfinder/console-start.sh"\n'
     if args.boot_ui:
@@ -103,8 +116,10 @@ def main():
         for path,content in files.items():print(f'\n--- {path} ---\n{content}')
         print('Preview only. Add --install to apply.');return
     if platform.system()!='Linux' or os.geteuid()!=0:parser.error('Installation requires sudo on the Pi running Linux')
-    for path in (app/'FishFinder.py',app/'traffic_display.py',app/'.venv/bin/python3'):
+    for path in (app/'FishFinder.py',app/'traffic_display.py',app/'fs_checks.py',app/('DemoFinder.bash' if args.demo else 'Finder.bash'),python):
         if not path.exists():parser.error(f'Missing installed file: {path}')
+    if not os.access(python,os.X_OK):parser.error(f'Interpreter is not executable: {python}')
+    if not shutil.which('flock'):parser.error('Install util-linux (flock) before enabling the collector')
     if args.boot_ui:
         if not shutil.which('startx'):parser.error('Install xinit/Xorg before enabling boot UI')
         if not account.pw_shell.endswith('/bash'):parser.error('Console autostart currently requires a bash login shell')
@@ -121,6 +136,9 @@ def main():
     check=subprocess.run(['runuser','-u',args.user,'--','test','-w',str(database.parent)])
     if check.returncode:
         parser.error(f'{args.user} needs write access to {database.parent}; fix ownership before installing')
+    probe_code="import sys;sys.path.insert(0,sys.argv[1]);from fs_checks import database_problem,write_problem;issue=database_problem(sys.argv[2]) or write_problem(sys.argv[3]);print(issue) if issue else None;sys.exit(1 if issue else 0)"
+    probe=subprocess.run(['runuser','-u',args.user,'--',str(python),'-c',probe_code,str(app),str(database),str(database.parent/'collector.lock')],capture_output=True,text=True)
+    if probe.returncode:parser.error(probe.stdout.strip() or probe.stderr.strip() or 'Data/lock permission check failed')
     for path,content in files.items():
         missing=[];parent=path.parent
         while not parent.exists():missing.append(parent);parent=parent.parent
