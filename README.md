@@ -1,3 +1,5 @@
+v0.4.12 fixes the service installer’s WorkingDirectory syntax and verifies candidate units with systemd-analyze before installation. Existing v0.4.11 users can replace just configure_pi.py; see SERVICES.md.
+
 v0.4.11 adds Display.bash, Finder.bash and DemoFinder.bash plus version-folder-aware service installation. See [SERVICES.md](SERVICES.md).
 
 v0.4.10 adds a saved ground-map checkbox in Setup → Display. The current bundled map remains an O22 demo experiment.

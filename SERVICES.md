@@ -1,6 +1,22 @@
-# FishFinder display launchers and collector service — v0.4.11
+# FishFinder display launchers and collector service — v0.4.12
 
 These instructions are for the Raspberry Pi running Debian/X11, as the normal user who already runs FishFinder successfully. Nothing is installed on this Mac. Collector service and display are independent: closing the display does not stop collection.
+
+## Repairing the v0.4.11 bad-unit-setting error
+
+The v0.4.11 generator incorrectly wrapped WorkingDirectory in quotes. Unlike ExecStart/Environment word values, systemd treats these as part of the path, so the unit is rejected before Python starts. The v0.4.12 installer emits a literal absolute directory and runs the Pi's `systemd-analyze verify` on a temporary candidate before replacing/enabling the unit. Service-start errors now point to status/journal commands rather than a Python subprocess traceback.
+
+For an existing v0.4.11 installation, replace only configure_pi.py with the corrected file, then from the same directory run:
+
+```sh
+sudo python3 configure_pi.py --app-dir "$PWD" --python /usr/local/FishFinder/.venv/bin/python3 --demo --install
+systemctl status fishfinder-collector --no-pager
+journalctl -u fishfinder-collector -n 30 --no-pager
+```
+
+Omit --demo for the production collector. Existing launcher files, databases, settings, and virtual environment can stay in place. The unit already enabled by the failed attempt does not need to be deleted. Correcting/reinstalling it reloads systemd and starts it. Verification requires systemd-analyze on the Pi; it does not require booting a second systemd instance.
+
+Source for WorkingDirectory parsing: https://github.com/systemd/systemd/blob/main/src/core/load-fragment.c (config_parse_working_directory).
 
 ## Files
 

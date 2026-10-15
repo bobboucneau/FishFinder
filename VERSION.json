@@ -1,15 +1,15 @@
 {
-  "version": "0.4.11",
-  "change": "Add production display and demo/live service launchers with shared lock, venv detection, and installation instructions",
+  "version": "0.4.12",
+  "change": "Fix literal WorkingDirectory syntax and validate candidate systemd unit before replacing/enabling it",
   "files": {
     "COLLECTOR-NOTES.md": "8559bf93c9104426d951306f6ef1ec9aad114a820aa1c19abcdf40240faa7b65",
     "FishFinder.py": "bcad136b5709a0d620971965b776bea4e8c959cb49d8bafe02928151639c67dd",
     "PI-STARTUP.md": "b8a077ca35a0e883f8a587117288e35fcf703f180ed1724deeadb61198565863",
-    "README.md": "53dbc74d12d9f04ef834c32bd4c57d050692c6ddd499ba929050cf1bc2cd49b6",
+    "README.md": "fba884d024b93e69c978b2e8ab0cfa038c377e6058e3b2a6c4a971d93250d288",
     "RELEASE-AND-MAPS.md": "99d2967d897411b742944b3b81eca2fe23a757fc3c77398f33c71869adc15ff4",
     "airport_data.py": "d2a1d762d26c4ad843822534eebd43f16e6c42ce739709fa8fd9e6748e45561a",
     "airports.json": "a983d199c9ca849e12382a35e67c96bde505e2db0ff9754255c0c8c4c0ee658c",
-    "configure_pi.py": "8c91f3c621fffd1dbb3eca2987e9b38433361ddef833fbed2ca0d034a818c70a",
+    "configure_pi.py": "a92b7e734022600d92a9d6deeb0b3cd2acedc594b03773064fce21a836b333a9",
     "demo_traffic.py": "39148d40ba241031b1b55f7f2d387c3112ad395a6fa1484eb398ecc7d743c086",
     "fs_checks.py": "eefb05f034a3689b75b5e6d03e250c44a3ffe917a56f87578795da3ab9e4e863",
     "preview-full.png": "4fae170741a67b460737b586fd9e0e3ee5b027216304c3522163cc3bfa1b3202",
@@ -38,7 +38,7 @@
     "Display.bash": "5e785f4adf337ec0deacf71b1978dd3dc849b0e1ca219ca91996888c1848e225",
     "Finder.bash": "72c7905f61287967b335810220ac3736987535e6bd65fc95bbec9744590de360",
     "DemoFinder.bash": "10bc9701fd5443bd9c93966af29788c8d41dd89aec90b62123c61967340a4012",
-    "SERVICES.md": "1cb890dfa9ccaa72753aa824ddf23ac1353db12cff031098131d36d867f54eca",
-    "test_service_launchers.py": "f59e2411bb9d32be6619d65e3fe090f86e35305d0ac621b237e8d2fa6d8cb571"
+    "SERVICES.md": "a66b3cdae3ef7abd2adb92655411304e9e01250d891d6511f7da68fa97abcc95",
+    "test_service_launchers.py": "ea4b5041634e07a2c325fc0638391ec08e64071e1a030edcc90c8136df9a4c02"
   }
 }

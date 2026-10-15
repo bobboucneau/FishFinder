@@ -6,7 +6,8 @@ import sys
 import tempfile
 import time
 import unittest
-from configure_pi import files_for,find_python,SERVICE
+from unittest.mock import patch
+from configure_pi import files_for,find_python,verify_unit,SERVICE
 
 ROOT=Path(__file__).resolve().parent
 
@@ -61,6 +62,21 @@ class ServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             app=Path(tmp)/'version';app.mkdir();venv=app.parent/'.venv/bin/python3';venv.parent.mkdir(parents=True);venv.write_text('');venv.chmod(0o755)
             self.assertEqual(find_python(app),venv)
+    def test_working_directory_is_literal_and_verifier_is_required(self):
+        app=Path('/usr/local/FishFinder/version with space')
+        unit=next(iter(files_for('pilot',Path('/home/pilot'),app,Path('/var/local/FishFinder/demo_objects.db'),True).values()))
+        directory=next(line.split('=',1)[1] for line in unit.splitlines() if line.startswith('WorkingDirectory='))
+        self.assertEqual(directory,str(app));self.assertTrue(directory.startswith('/'))
+        with self.assertRaises(ValueError):files_for('pilot',Path('/home/pilot'),Path('/bad\npath'),Path('/var/local/FishFinder/demo_objects.db'))
+        def inspect(command,**kwargs):
+            self.assertEqual(command[:2],['/usr/bin/systemd-analyze','verify'])
+            self.assertEqual(Path(command[2]).name,SERVICE)
+            self.assertEqual(Path(command[2]).read_text(),unit)
+            return subprocess.CompletedProcess(command,0,'','')
+        with patch('configure_pi.subprocess.run',side_effect=inspect):verify_unit(unit,'/usr/bin/systemd-analyze')
+        with patch('configure_pi.subprocess.run',return_value=subprocess.CompletedProcess([],1,'','bad unit')):
+            with self.assertRaisesRegex(ValueError,'bad unit'):verify_unit(unit,'/usr/bin/systemd-analyze')
+
     def test_live_display_uses_live_database(self):
         text=(ROOT/'Display.bash').read_text()
         self.assertIn('xinput map-to-output',text);self.assertIn('/flying_objects.db',text)

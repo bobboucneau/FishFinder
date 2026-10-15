@@ -8,6 +8,7 @@ import pwd
 import shlex
 import shutil
 import subprocess
+import tempfile
 
 SERVICE='fishfinder-collector.service'
 MARKER='# FishFinder console startup'
@@ -24,7 +25,11 @@ def files_for(user, home, app, database, demo=False, boot_ui=False, python=None)
     python=python or app/'.venv/bin/python3'
     launcher=app/('DemoFinder.bash' if demo else 'Finder.bash')
     command=['/bin/bash',str(launcher)]
-    # systemd command-line quoting differs from shell expansion.
+    # WorkingDirectory is a single literal path, unlike ExecStart/Environment
+    # words: surrounding quotes become part of the path and invalidate it.
+    if any(c in str(app) for c in '\n\r\x00'):raise ValueError('Invalid application path')
+    directory=str(app).replace('%','%%')
+    # ExecStart and Environment use systemd word quoting.
     def systemd(value):return '"'+str(value).replace('\\','\\\\').replace('"','\\"').replace('%','%%')+'"'
     unit=f'''[Unit]
 Description=FishFinder traffic collector ({'demo' if demo else 'production'})
@@ -34,7 +39,7 @@ StartLimitIntervalSec=0
 [Service]
 Type=simple
 User={user}
-WorkingDirectory={systemd(app)}
+WorkingDirectory={directory}
 Environment={systemd('FISHFINDER_SETTINGS='+str(app/'settings.json'))}
 Environment={systemd('FISHFINDER_PYTHON='+str(python))}
 Environment={systemd('FISHFINDER_DATABASE='+str(database))}
@@ -92,6 +97,16 @@ fi
     return result
 
 
+def verify_unit(content,validator):
+    """Verify a candidate with the Pi's actual systemd parser before replacing it."""
+    with tempfile.TemporaryDirectory(prefix='fishfinder-unit-') as tmp:
+        candidate=Path(tmp)/SERVICE
+        candidate.write_text(content)
+        result=subprocess.run([validator,'verify',str(candidate)],capture_output=True,text=True)
+        if result.returncode:
+            raise ValueError('systemd rejected the candidate unit:\n'+(result.stderr.strip() or result.stdout.strip()))
+
+
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install',action='store_true',help='Apply changes; without this flag only preview files')
@@ -139,6 +154,10 @@ def main():
     probe_code="import sys;sys.path.insert(0,sys.argv[1]);from fs_checks import database_problem,write_problem;issue=database_problem(sys.argv[2]) or write_problem(sys.argv[3]);print(issue) if issue else None;sys.exit(1 if issue else 0)"
     probe=subprocess.run(['runuser','-u',args.user,'--',str(python),'-c',probe_code,str(app),str(database),str(database.parent/'collector.lock')],capture_output=True,text=True)
     if probe.returncode:parser.error(probe.stdout.strip() or probe.stderr.strip() or 'Data/lock permission check failed')
+    validator=shutil.which('systemd-analyze')
+    if not validator:parser.error('systemd-analyze is required to validate the unit before installation')
+    try:verify_unit(files[Path('/etc/systemd/system')/SERVICE],validator)
+    except ValueError as exc:parser.error(str(exc))
     for path,content in files.items():
         missing=[];parent=path.parent
         while not parent.exists():missing.append(parent);parent=parent.parent
@@ -151,9 +170,12 @@ def main():
             # Ensure directories created as root remain usable by the normal user.
             for parent in missing:os.chown(parent,account.pw_uid,account.pw_gid)
         path.chmod(0o755 if path.name=='fishfinder-xsession' else 0o644)
-    subprocess.run(['systemctl','daemon-reload'],check=True)
-    subprocess.run(['systemctl','enable','--now',SERVICE],check=True)
-    subprocess.run(['systemctl','restart',SERVICE],check=True)
+    try:
+        subprocess.run(['systemctl','daemon-reload'],check=True)
+        subprocess.run(['systemctl','enable','--now',SERVICE],check=True)
+        subprocess.run(['systemctl','restart',SERVICE],check=True)
+    except subprocess.CalledProcessError:
+        parser.exit(1,'Service setup/start failed. Inspect: systemctl status fishfinder-collector --no-pager\nThen: journalctl -u fishfinder-collector -n 40 --no-pager\n')
     print('Collector installed. Read logs: journalctl -u fishfinder-collector -f')
     if args.boot_ui:print('Console autologin/startx installed for next boot. Exit returns to the console; no restart loop.')
 
