@@ -1,3 +1,5 @@
+Measured minimal-world experiment (v0.4.13): **35,426,304 bytes installed** using generalized Natural Earth data. This is much less detailed than an OpenStreetMap basemap. See [WORLD-MAP.md](WORLD-MAP.md). The larger storage estimates below concern richer data and were not measured in this experiment.
+
 # Worldwide background feasibility — 2026-10-14
 
 The objective is a quiet orientation layer: selected roads, railways, coastlines, major rivers, lakes/reservoirs; no navigation/chart content, buildings, business POIs, terrain or imagery. The pilot should not select tiles before a flight. This note assesses feasibility; worldwide data is NOT included or implemented.

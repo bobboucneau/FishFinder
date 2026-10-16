@@ -1,3 +1,5 @@
+For the optional worldwide indexed map introduced in v0.4.13, see [WORLD-MAP.md](WORLD-MAP.md). The local demo described below remains available; line colors now use amber roads and cyan rivers.
+
 # O22 ground-reference experiment — v0.4.10
 
 Optional, bundled, offline experiment. No region selector or network access on the Pi. No weather display is implemented.

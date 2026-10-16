@@ -37,7 +37,7 @@ class GroundTests(unittest.TestCase):
         self.assertEqual(rgb(0,0),g.BG)
         horizontal=[(0,-.5),(0,.5)]
         image=g.rasterize([('road',horizontal)],[],(origin,90,10,1,100)).split(b'\n',3)[3]
-        self.assertIn((39,51,50),[tuple(image[(10*100+x)*3:(10*100+x+1)*3]) for x in (49,50)])
+        self.assertIn((104,77,33),[tuple(image[(10*100+x)*3:(10*100+x+1)*3]) for x in (49,50)])
     def test_gui_uses_one_cached_image_and_rejects_old_zoom(self):
         obj=gui();origin=(38.03,-120.41);state=(origin,0,10,1,398)
         obj.ground_level=1;obj.ground_image=None;obj.ground_seen=None;obj.ground_request_key=None

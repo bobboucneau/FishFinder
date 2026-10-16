@@ -6,3 +6,12 @@ settings.json
 *.db-wal
 *.db-shm
 .DS_Store
+
+# Worldwide map experiment: generated data and downloads stay outside Git.
+*.sqlite
+*.sqlite-*
+*.building
+*.pmtiles
+world-map-experiment/
+world-map-source/
+ne_10m_*.zip

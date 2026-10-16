@@ -1,3 +1,5 @@
+v0.4.13 adds an optional 35.43 MB worldwide ground-reference map, amber roads, dashed violet railways and cyan rivers. The data stays outside GitHub. See [WORLD-MAP.md](WORLD-MAP.md) for installation, measured storage, and important detail limits.
+
 v0.4.12 fixes the service installer’s WorkingDirectory syntax and verifies candidate units with systemd-analyze before installation. Existing v0.4.11 users can replace just configure_pi.py; see SERVICES.md.
 
 v0.4.11 adds Display.bash, Finder.bash and DemoFinder.bash plus version-folder-aware service installation. See [SERVICES.md](SERVICES.md).

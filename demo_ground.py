@@ -28,7 +28,7 @@ def load_pack(path=PACK):
         return tuple(tuple(p) for p in coords)
     paths=[]
     for item in data['paths']:
-        if item['kind'] not in ('road','water'):raise ValueError('Unknown map feature')
+        if item['kind'] not in ('road','water','river','rail'):raise ValueError('Unknown map feature')
         coords=points(item['points'])
         if len(coords)>=2:paths.append((item['kind'],coords))
     polygons=[]
@@ -63,8 +63,9 @@ def rasterize(paths,polygons,state):
     if not (2<=radius<=20 and level in (1,2) and 64<=size<=512):raise ValueError('Invalid render state')
     pixels=bytearray(bytes(BG)*(size*size));center=(size-1)/2;scale=center/radius
     angle=math.radians(heading);cos,sin=math.cos(angle),math.sin(angle)
-    road=(39,51,50) if level==1 else (71,84,80)
-    shore=(23,56,67) if level==1 else (37,85,106)
+    road=(104,77,33) if level==1 else (155,112,46)
+    rail=(86,65,112) if level==1 else (128,96,163)
+    shore=(25,104,132) if level==1 else (38,151,182)
     water=(10,32,42) if level==1 else (16,49,65)
     def screen(points):
         result=[]
@@ -86,20 +87,23 @@ def rasterize(paths,polygons,state):
                 lo=max(0,math.ceil(left-.5));hi=min(size-1,math.floor(right-.5))
                 if hi>=lo:pixels[(row*size+lo)*3:(row*size+hi+1)*3]=bytes(water)*(hi-lo+1)
     for rings in polygons:fill(rings)
-    def stroke(points,color):
-        color=bytes(color)
+    def stroke(points,color,dashed=False):
+        color=bytes(color);step=0
         for a,b in zip(points,points[1:]):
             clipped=clip_rectangle(a,b,size)
             if not clipped:continue
             a,b=clipped;x,y=map(round,a);xx,yy=map(round,b)
             dx,dy=abs(xx-x),-abs(yy-y);sx=1 if x<xx else -1;sy=1 if y<yy else -1;err=dx+dy
             while True:
-                i=(y*size+x)*3;pixels[i:i+3]=color
+                i=(y*size+x)*3
+                if not dashed or step%9<5:pixels[i:i+3]=color
+                step+=1
                 if x==xx and y==yy:break
                 twice=2*err
                 if twice>=dy:err+=dy;x+=sx
                 if twice<=dx:err+=dx;y+=sy
-    for kind,points in paths:stroke(screen(points),road if kind=='road' else shore)
+    for kind,points in paths:
+        stroke(screen(points),road if kind=='road' else rail if kind=='rail' else shore,kind=='rail')
     # Round mask; outside is the same black as the traffic canvas.
     for row in range(size):
         half=math.sqrt(max(0,center*center-(row-center)**2))
@@ -119,7 +123,12 @@ def latest_put(channel,message):
 def render_process(path,requests,results):
     # This module has no Tk import; spawn cannot inherit the GUI's Tk state.
     try:
-        bounds,paths,polygons=load_pack(path)
+        world=None
+        if Path(path).suffix=='.sqlite':
+            from world_ground import WorldMap
+            world=WorldMap(path);bounds=[-90,-180,90,180]
+            paths=polygons=()
+        else:bounds,paths,polygons=load_pack(path)
         results.put(('ready',bounds))
         while True:
             state=requests.get()
@@ -129,15 +138,19 @@ def render_process(path,requests,results):
                 except queue.Empty:break
                 if new is None:return
                 state=new
+            if world:paths,polygons=world.query(state[0],state[2])
             image=rasterize(paths,polygons,state)
             latest_put(results,('image',state,image))
     except Exception as exc:latest_put(results,('error',str(exc)))
+    finally:
+        if 'world' in locals() and world:world.close()
 
 class GroundLayer:
     def __init__(self,path=PACK):
         ctx=mp.get_context('spawn')
         self.requests=ctx.Queue(maxsize=1);self.results=ctx.Queue(maxsize=2)
         self.result=None;self.error='';self.bounds=None;self.closed=False
+        self.world=Path(path).suffix=='.sqlite'
         self.process=ctx.Process(target=render_process,args=(str(path),self.requests,self.results),daemon=True,name='ground-raster')
         self.process.start()
     def request(self,state):
@@ -159,6 +172,7 @@ class GroundLayer:
         for channel in (self.requests,self.results):channel.cancel_join_thread();channel.close()
     def covers(self,origin,radius):
         if not self.bounds:return False
+        if self.world:return True
         south,west,north,east=self.bounds
         lat,lon=origin;dl=radius/(60*max(.1,math.cos(math.radians(lat))))
         return south<=lat-radius/60 and lat+radius/60<=north and west<=lon-dl and lon+dl<=east

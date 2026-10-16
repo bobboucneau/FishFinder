@@ -352,6 +352,12 @@ class Display:
         # Once saved in Setup, the user's on/off preference wins on restart.
         if getattr(args,"demo_map",False) and not settings.explicit('ground_map'):
             self.config['ground_map']=True
+        from world_ground import DEFAULT_PATH
+        selected_map=getattr(args,'map_data',None) or os.environ.get('FISHFINDER_MAP_DATA')
+        self.ground_path=(demo_ground.PACK if getattr(args,'demo_map',False) else
+                          Path(selected_map) if selected_map else DEFAULT_PATH if DEFAULT_PATH.is_file() else demo_ground.PACK)
+        self.ground_global=self.ground_path.suffix=='.sqlite'
+        if selected_map and not getattr(args,'demo_map',False) and not settings.explicit('ground_map'):self.config['ground_map']=True
         self.ground_level=1 if self.config['ground_map'] else 0
         self.ground=None
         self.ground_request_time=0.0
@@ -462,10 +468,10 @@ class Display:
         self.map_heading=own_heading if self.config['orientation']=='track-up' and own_heading is not None else 0.0
         if fix:mode=self.own_source+' · '+('TRACK UP' if self.config['orientation']=='track-up' and own_heading is not None else 'NORTH UP')
         if self.ground:self.ground.poll()
-        ground_demo=snap.demo or bool(snap.receiver and snap.receiver[2].startswith("DEMO:"))
-        if ground_demo and self.ground_level and self.ground is None:
-            self.ground=demo_ground.GroundLayer()
-        if origin and ground_demo and self.ground and self.ground_level:
+        ground_allowed=snap.demo or bool(snap.receiver and snap.receiver[2].startswith("DEMO:")) or self.ground_global
+        if ground_allowed and self.ground_level and self.ground is None:
+            self.ground=demo_ground.GroundLayer(self.ground_path)
+        if origin and ground_allowed and self.ground and self.ground_level:
             self.draw_ground(origin)
         for fraction in (0.25,0.5,0.75,1):
             r=radius*fraction
@@ -598,7 +604,7 @@ class Display:
         airport_status='Airports unavailable' if self.catalog.error else 'Airports ON' if self.airports_visible else 'Airports OFF'
         self.text(400,171,airport_status,fill=BLUE,size=10)
         self.buttons.append((318,158,482,185,self.toggle_airports))
-        if self.ground and ground_demo:
+        if self.ground and ground_allowed:
             self.rect(318,226,482,257,fill='#10251f',outline='#345247')
             self.text(400,242,'Map '+('OFF','LOW','NORMAL')[self.ground_level],size=11)
             self.buttons.append((318,226,482,257,self.cycle_ground))
@@ -641,8 +647,8 @@ class Display:
             if message:
                 self.rect(195,365,605,435,fill='#071710',outline=YELLOW)
                 self.text(400,400,message,fill=YELLOW,size=16,width=390*self.unit)
-        if self.ground and ground_demo and self.ground_level:
-            self.text(400,603,'Ground reference experiment · © OpenStreetMap contributors',fill=MUTED,size=9,width=390*self.unit)
+        if self.ground and ground_allowed and self.ground_level:
+            self.text(400,603,'Natural Earth · generalized reference' if self.ground_global else 'Ground reference experiment · © OpenStreetMap contributors',fill=MUTED,size=9,width=390*self.unit)
             notice='Map unavailable' if self.ground.error else 'Map loading...' if self.ground_image is None or time.monotonic()-self.ground_image_time>3 else 'Map coverage partial' if origin and self.ground.bounds and not self.ground.covers(origin,self.radius_nm) else ''
             if notice:self.text(400,585,notice,fill=MUTED,size=9)
         if self.permission_issues:
@@ -897,11 +903,14 @@ def main():
     demo_options.add_argument('--demo',action='store_true',help='Read the moving collector demo database')
     demo_options.add_argument('--sample-demo',action='store_true',help='Legacy display-only fixed sample targets')
     parser.add_argument('--demo-map',action='store_true',help='Optional bundled O22 roads/water experiment; demo only')
+    parser.add_argument('--map-data',type=Path,help='External worldwide world_ground.sqlite; also FISHFINDER_MAP_DATA or /var/local/FishFinder/world_ground.sqlite')
     parser.add_argument('--touch-debug',action='store_true',help='Print received touch coordinates/actions and show a temporary touch marker')
     parser.add_argument('--no-ownship',action='store_true',help='Demo without an ownship fix')
     parser.add_argument('--range',type=int,choices=(2,5,10,20),default=None)
     parser.add_argument('--splash-seconds',type=float,default=3,help='Startup splash duration; 0 disables, tap dismisses')
     args=parser.parse_args()
+    if args.map_data and args.demo_map:parser.error('Choose either --map-data or --demo-map')
+    if args.map_data and args.map_data.suffix!='.sqlite':parser.error('--map-data must name a .sqlite map file')
     if args.demo_map and not args.demo:parser.error("--demo-map requires the moving --demo")
     if not math.isfinite(args.splash_seconds) or args.splash_seconds<0:parser.error('Splash duration must be finite and nonnegative')
     if args.demo and args.db=='/var/local/FishFinder/flying_objects.db':
