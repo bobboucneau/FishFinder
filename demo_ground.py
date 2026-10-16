@@ -65,15 +65,15 @@ def rasterize(paths,polygons,state):
     angle=math.radians(heading);cos,sin=math.cos(angle),math.sin(angle)
     road=(104,77,33) if level==1 else (155,112,46)
     rail=(86,65,112) if level==1 else (128,96,163)
-    shore=(25,104,132) if level==1 else (38,151,182)
-    water=(10,32,42) if level==1 else (16,49,65)
+    water=(20,52,68) if level==1 else (32,78,98)
+    shore=water
     def screen(points):
         result=[]
         for lat,lon in points:
             e,n=project(lat,lon,origin)
             result.append((center+(e*cos-n*sin)*scale,center-(e*sin+n*cos)*scale))
         return result
-    def fill(rings):
+    def fill(rings,color):
         # Even/odd scanline rule fills complete outer rings and preserves islands.
         transformed=[screen(r) for r in rings]
         edges=[(a,b) for ring in transformed for a,b in zip(ring,ring[1:]) if a[1]!=b[1]]
@@ -85,8 +85,14 @@ def rasterize(paths,polygons,state):
             xs=sorted(a[0]+(y-a[1])*(b[0]-a[0])/(b[1]-a[1]) for a,b in edges if min(a[1],b[1])<=y<max(a[1],b[1]))
             for left,right in zip(xs[::2],xs[1::2]):
                 lo=max(0,math.ceil(left-.5));hi=min(size-1,math.floor(right-.5))
-                if hi>=lo:pixels[(row*size+lo)*3:(row*size+hi+1)*3]=bytes(water)*(hi-lo+1)
-    for rings in polygons:fill(rings)
+                if hi>=lo:pixels[(row*size+lo)*3:(row*size+hi+1)*3]=bytes(color)*(hi-lo+1)
+    # Settlement shading stays below water; water must remain recognizable.
+    ordered=sorted(polygons,key=lambda p:0 if isinstance(p,dict) and p['kind']=='ground_urban' else 1)
+    for polygon in ordered:
+        if isinstance(polygon,dict):
+            urban=(19,23,28) if level==1 else (30,36,45)
+            fill(polygon['rings'],urban if polygon['kind']=='ground_urban' else water)
+        else:fill(polygon,water)
     def stroke(points,color,dashed=False):
         color=bytes(color);step=0
         for a,b in zip(points,points[1:]):
@@ -124,7 +130,10 @@ def render_process(path,requests,results):
     # This module has no Tk import; spawn cannot inherit the GUI's Tk state.
     try:
         world=None
-        if Path(path).suffix=='.sqlite':
+        if Path(path).suffix=='.pmtiles':
+            from tile_ground import TileMap
+            world=TileMap(path);bounds=world.bounds;paths=polygons=()
+        elif Path(path).suffix=='.sqlite':
             from world_ground import WorldMap
             world=WorldMap(path);bounds=[-90,-180,90,180]
             paths=polygons=()
@@ -140,7 +149,7 @@ def render_process(path,requests,results):
                 state=new
             if world:paths,polygons=world.query(state[0],state[2])
             image=rasterize(paths,polygons,state)
-            latest_put(results,('image',state,image))
+            latest_put(results,('image',state,image,getattr(world,'labels',())))
     except Exception as exc:latest_put(results,('error',str(exc)))
     finally:
         if 'world' in locals() and world:world.close()
@@ -172,7 +181,8 @@ class GroundLayer:
         for channel in (self.requests,self.results):channel.cancel_join_thread();channel.close()
     def covers(self,origin,radius):
         if not self.bounds:return False
-        if self.world:return True
+        if self.bounds==[-90,-180,90,180]:return True
         south,west,north,east=self.bounds
         lat,lon=origin;dl=radius/(60*max(.1,math.cos(math.radians(lat))))
-        return south<=lat-radius/60 and lat+radius/60<=north and west<=lon-dl and lon+dl<=east
+        return (south<=lat-radius/60 and lat+radius/60<=north and
+                ((west<=-180 and east>=180) or west<=lon-dl and lon+dl<=east))

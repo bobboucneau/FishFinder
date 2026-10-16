@@ -1,5 +1,7 @@
 # Minimal worldwide map experiment — v0.4.13
 
+For the more detailed v0.4.14 OpenStreetMap experiment, see [RICH-MAP.md](RICH-MAP.md). This page records the earlier sparse Natural Earth comparison.
+
 The optional world file is separate from the code package and GitHub. One file
 covers the world offline; no region selection, flight-time internet, or tile
 preloading is needed. Turn the map on/off in Setup. Traffic remains above it.

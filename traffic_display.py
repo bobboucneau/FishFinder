@@ -353,16 +353,19 @@ class Display:
         if getattr(args,"demo_map",False) and not settings.explicit('ground_map'):
             self.config['ground_map']=True
         from world_ground import DEFAULT_PATH
+        from tile_ground import DEFAULT_RICH_PATH
         selected_map=getattr(args,'map_data',None) or os.environ.get('FISHFINDER_MAP_DATA')
         self.ground_path=(demo_ground.PACK if getattr(args,'demo_map',False) else
-                          Path(selected_map) if selected_map else DEFAULT_PATH if DEFAULT_PATH.is_file() else demo_ground.PACK)
-        self.ground_global=self.ground_path.suffix=='.sqlite'
+                          Path(selected_map) if selected_map else DEFAULT_RICH_PATH if DEFAULT_RICH_PATH.is_file() else
+                          DEFAULT_PATH if DEFAULT_PATH.is_file() else demo_ground.PACK)
+        self.ground_global=self.ground_path.suffix in ('.sqlite','.pmtiles')
         if selected_map and not getattr(args,'demo_map',False) and not settings.explicit('ground_map'):self.config['ground_map']=True
         self.ground_level=1 if self.config['ground_map'] else 0
         self.ground=None
         self.ground_request_time=0.0
         self.ground_image=None;self.ground_image_state=None;self.ground_seen=None;self.ground_image_time=0.0
         self.ground_request_key=None
+        self.ground_labels=()
         if not args.demo:
             self.worker=threading.Thread(target=reader,args=(self.stop,self.out,args.db),daemon=True,name='database-reader')
             self.worker.start()
@@ -377,6 +380,25 @@ class Display:
     def text(self,x,y,text,fill=WHITE,size=12,**kwargs):
         return self.canvas.create_text(self.cx+(x-400)*self.unit,self.cy+(y-400)*self.unit,
             text=text,fill=fill,font=('DejaVu Sans',max(9,int(size*self.unit))),**kwargs)
+
+    def rim_attribution(self,text):
+        """Readable text along the inside of the lower-right circular rim."""
+        font=('DejaVu Sans',max(8,int(8*self.unit)))
+        key=(text,font)
+        if getattr(self,'rim_key',None)!=key:
+            if isinstance(self.root,tk.Misc):
+                import tkinter.font as tkfont
+                measured=tkfont.Font(root=self.root,font=font)
+                widths=[measured.measure(char) for char in text]
+            else:widths=[font[1]*(.35 if char==' ' else .6) for char in text]
+            self.rim_key=key;self.rim_widths=widths
+        radius=390*self.unit;progress=-sum(self.rim_widths)/2
+        for char,width in zip(text,self.rim_widths):
+            phi=math.pi/4-(progress+width/2)/radius
+            if not char.isspace():
+                self.canvas.create_text(self.cx+radius*math.cos(phi),self.cy+radius*math.sin(phi),
+                    text=char,fill=MUTED,font=font,angle=90-math.degrees(phi),tags='map-attribution')
+            progress+=width
 
     def rect(self,x1,y1,x2,y2,**kwargs):
         return self.canvas.create_rectangle(self.cx+(x1-400)*self.unit,self.cy+(y1-400)*self.unit,
@@ -648,7 +670,7 @@ class Display:
                 self.rect(195,365,605,435,fill='#071710',outline=YELLOW)
                 self.text(400,400,message,fill=YELLOW,size=16,width=390*self.unit)
         if self.ground and ground_allowed and self.ground_level:
-            self.text(400,603,'Natural Earth · generalized reference' if self.ground_global else 'Ground reference experiment · © OpenStreetMap contributors',fill=MUTED,size=9,width=390*self.unit)
+            self.rim_attribution('Natural Earth' if self.ground_global and self.ground_path.suffix=='.sqlite' else '© OpenStreetMap contributors')
             notice='Map unavailable' if self.ground.error else 'Map loading...' if self.ground_image is None or time.monotonic()-self.ground_image_time>3 else 'Map coverage partial' if origin and self.ground.bounds and not self.ground.covers(origin,self.radius_nm) else ''
             if notice:self.text(400,585,notice,fill=MUTED,size=9)
         if self.permission_issues:
@@ -686,7 +708,7 @@ class Display:
             self.ground_request_key=key;self.ground_request_time=now
         result=self.ground.result
         if result is not None and result is not self.ground_seen:
-            result_state,ppm=result
+            result_state,ppm=result[:2]
             # Discard outdated zoom/brightness results instead of showing a wrong scale.
             if result_state[2:]==state[2:]:
                 try:
@@ -694,10 +716,23 @@ class Display:
                 except tk.TclError as exc:
                     self.ground.error=str(exc);self.ground_level=0;return
                 self.ground_image=image;self.ground_image_state=result_state;self.ground_image_time=now
+                self.ground_labels=result[2] if len(result)>2 else ()
             self.ground_seen=result
         if self.ground_image is not None and self.ground_image_state[2:]==state[2:] and now-self.ground_image_time<=3:
             # One image item per traffic frame; no map paths or pixel work in Tk.
             self.canvas.create_image(self.cx,self.cy,image=self.ground_image)
+            occupied=[]
+            for lat,lon,name in getattr(self,'ground_labels',()):
+                pos=rotate(xy(lat,lon,self.ground_image_state[0]),self.ground_image_state[1])
+                if math.hypot(*pos)>self.radius_nm*.86:continue
+                x,y=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels+8*self.unit
+                width=min(200,len(name)*5.5)*self.unit
+                box=(x-width/2-4,y-8,x+width/2+4,y+8)
+                if any(math.hypot(box[a]-self.cx,box[b]-self.cy)>self.radius_nm*self.pixels-5*self.unit for a in (0,2) for b in (1,3)):continue
+                if any(box[0]<b[2] and box[2]>b[0] and box[1]<b[3] and box[3]>b[1] for b in occupied):continue
+                self.canvas.create_text(x,y,text=name,fill='#728082',font=('DejaVu Sans',max(9,int(10*self.unit))))
+                occupied.append(box)
+                if len(occupied)>=12:break
 
     def toggle_airports(self):
         self.airports_visible=not self.airports_visible;self.draw()
@@ -903,14 +938,14 @@ def main():
     demo_options.add_argument('--demo',action='store_true',help='Read the moving collector demo database')
     demo_options.add_argument('--sample-demo',action='store_true',help='Legacy display-only fixed sample targets')
     parser.add_argument('--demo-map',action='store_true',help='Optional bundled O22 roads/water experiment; demo only')
-    parser.add_argument('--map-data',type=Path,help='External worldwide world_ground.sqlite; also FISHFINDER_MAP_DATA or /var/local/FishFinder/world_ground.sqlite')
+    parser.add_argument('--map-data',type=Path,help='External world_landmarks.pmtiles or world_ground.sqlite; also FISHFINDER_MAP_DATA; defaults under /var/local/FishFinder/')
     parser.add_argument('--touch-debug',action='store_true',help='Print received touch coordinates/actions and show a temporary touch marker')
     parser.add_argument('--no-ownship',action='store_true',help='Demo without an ownship fix')
     parser.add_argument('--range',type=int,choices=(2,5,10,20),default=None)
     parser.add_argument('--splash-seconds',type=float,default=3,help='Startup splash duration; 0 disables, tap dismisses')
     args=parser.parse_args()
     if args.map_data and args.demo_map:parser.error('Choose either --map-data or --demo-map')
-    if args.map_data and args.map_data.suffix!='.sqlite':parser.error('--map-data must name a .sqlite map file')
+    if args.map_data and args.map_data.suffix not in ('.sqlite','.pmtiles'):parser.error('--map-data must name a .sqlite or .pmtiles map file')
     if args.demo_map and not args.demo:parser.error("--demo-map requires the moving --demo")
     if not math.isfinite(args.splash_seconds) or args.splash_seconds<0:parser.error('Splash duration must be finite and nonnegative')
     if args.demo and args.db=='/var/local/FishFinder/flying_objects.db':

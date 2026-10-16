@@ -1,3 +1,5 @@
+v0.4.14 adds the richer offline worldwide landmark experiment: water outlines and streams, roads, railways, settlements, matching muted-blue water, and curved rim attribution. Map data is installed separately and kept outside GitHub. See [RICH-MAP.md](RICH-MAP.md) for installation, measured storage, and Pi testing.
+
 v0.4.13 adds an optional 35.43 MB worldwide ground-reference map, amber roads, dashed violet railways and cyan rivers. The data stays outside GitHub. See [WORLD-MAP.md](WORLD-MAP.md) for installation, measured storage, and important detail limits.
 
 v0.4.12 fixes the service installer’s WorkingDirectory syntax and verifies candidate units with systemd-analyze before installation. Existing v0.4.11 users can replace just configure_pi.py; see SERVICES.md.

@@ -33,7 +33,7 @@ class GroundTests(unittest.TestCase):
         pixels=ppm.split(b'\n',3)[3]
         def rgb(x,y):return tuple(pixels[(y*100+x)*3:(y*100+x+1)*3])
         self.assertEqual(rgb(50,50),g.BG)
-        self.assertEqual(rgb(65,50),(10,32,42))
+        self.assertEqual(rgb(65,50),(20,52,68))
         self.assertEqual(rgb(0,0),g.BG)
         horizontal=[(0,-.5),(0,.5)]
         image=g.rasterize([('road',horizontal)],[],(origin,90,10,1,100)).split(b'\n',3)[3]

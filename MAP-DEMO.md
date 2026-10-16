@@ -1,4 +1,4 @@
-For the optional worldwide indexed map introduced in v0.4.13, see [WORLD-MAP.md](WORLD-MAP.md). The local demo described below remains available; line colors now use amber roads and cyan rivers.
+For the richer worldwide indexed map in v0.4.14, see [RICH-MAP.md](RICH-MAP.md); the earlier sparse world comparison is in [WORLD-MAP.md](WORLD-MAP.md). The local demo described below remains available; current colors use amber roads and matching muted-blue rivers and lakes.
 
 # O22 ground-reference experiment — v0.4.10
 
