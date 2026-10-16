@@ -35,6 +35,11 @@ class Canvas:
 
 
 class Root:
+    def __init__(self):self.callbacks={};self.counter=0
+    def after(self,delay,callback):
+        self.counter+=1;self.callbacks[self.counter]=callback;return self.counter
+    def after_cancel(self,token):self.callbacks.pop(token,None)
+    def fire(self,token):self.callbacks.pop(token)()
     def __getattr__(self,name): return lambda *a,**kw:None
 
 
@@ -89,14 +94,14 @@ class Tests(unittest.TestCase):
         self.assertTrue(d.airport_hits)
         self.assertAlmostEqual(d.airport_track,0)
         hit=next(h for h in d.airport_hits if h[2]=='KRHV')
-        d.tap(SimpleNamespace(x=hit[0],y=hit[1]))
+        d.tap(SimpleNamespace(x=hit[0],y=hit[1]));d.root.fire(d.pending_tap[0])
         self.assertEqual(d.airport_selected,'KRHV')
         d.airport_action('view');self.assertTrue(d.airport_runways)
         d.draw();self.assertTrue(d.airport_buttons)
         d.airport_action('close');self.assertIsNone(d.airport_selected)
         # Traffic must win when an airport lies under its touch target.
         tx,ty,tail=d.hits[0];d.airport_hits=[(tx,ty,'KRHV')]
-        d.tap(SimpleNamespace(x=tx,y=ty));self.assertEqual(d.selected,tail)
+        d.tap(SimpleNamespace(x=tx,y=ty));d.root.fire(d.pending_tap[0]);self.assertEqual(d.selected,tail)
         d.selected=None;d.toggle_airports();self.assertEqual(d.airport_hits,[])
         # Dataset remains available for selected details after changing range.
         d.airport_selected='KSJC';d.airport_runways=False;d.airport_page=100;d.airport_details()

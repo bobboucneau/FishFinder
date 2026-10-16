@@ -461,7 +461,7 @@ class Display:
         radius=398*self.unit;self.pixels=radius/self.radius_nm
         self.hits=[]; self.buttons=[];now=time.time()
         self.idle=bool(self.config['idle_seconds'] and time.monotonic()-self.last_touch>=self.config['idle_seconds'] and
-                       not (self.selected or self.airport_selected or self.exit_pending or self.setup_panel))
+                       not (self.exit_pending or self.setup_panel))
         snap=self.snapshot
         histories=active_histories(snap.reports,now)
         histories,own,self.own_source=select_ownship(snap,histories,self.config,now)
@@ -584,7 +584,9 @@ class Display:
                     color,reason,cpa=assess(pos,tv,ov,p.speed,age>10)
                 else:
                     color,reason,cpa=GREEN,'No ownship fix: assessment unavailable',None
-                separated=bool(fix and self.config['vertical_filter'] and vertical_clear(history,own,self.config['vertical_threshold_ft'],HORIZON))
+                clear=bool(fix and vertical_clear(history,own,self.config['vertical_threshold_ft'],HORIZON))
+                if clear and self.config['hide_vertical']:continue
+                separated=clear and self.config['vertical_filter']
                 if separated:
                     color=MUTED;reason=f'Observed vertical-rate model: beyond {self.config["vertical_threshold_ft"]:,} ft over projection'
                 if not fix:
@@ -670,7 +672,7 @@ class Display:
                 self.rect(195,365,605,435,fill='#071710',outline=YELLOW)
                 self.text(400,400,message,fill=YELLOW,size=16,width=390*self.unit)
         if self.ground and ground_allowed and self.ground_level:
-            self.rim_attribution('Natural Earth' if self.ground_global and self.ground_path.suffix=='.sqlite' else '© OpenStreetMap contributors')
+            self.rim_attribution('Natural Earth' if self.ground_global and self.ground_path.suffix=='.sqlite' else 'Map data © OpenStreetMap contributors')
             notice='Map unavailable' if self.ground.error else 'Map loading...' if self.ground_image is None or time.monotonic()-self.ground_image_time>3 else 'Map coverage partial' if origin and self.ground.bounds and not self.ground.covers(origin,self.radius_nm) else ''
             if notice:self.text(400,585,notice,fill=MUTED,size=9)
         if self.permission_issues:
@@ -889,11 +891,39 @@ class Display:
 
     def tap(self,event):
         self.trace_touch(event)
+        now=time.monotonic()
+        if now<self.splash_until:
+            self.splash_until=0;self.last_touch=now;self.draw();return
+        x=(event.x-self.cx)/self.unit+400;y=(event.y-self.cy)/self.unit+400
+        # Visible controls and popup actions never wait for a second tap.
+        popup=bool(self.selected or self.airport_selected)
+        immediate=(self.exit_pending or
+            (self.selected and 322<=x<=478 and 571<=y<=602) or
+            (self.airport_selected and any(x1<=x<=x2 and y1<=y<=y2
+                for x1,y1,x2,y2,_ in self.airport_buttons)) or
+            (not popup and any(x1<=x<=x2 and y1<=y<=y2
+                for x1,y1,x2,y2,_ in self.buttons)))
+        pending=getattr(self,'pending_tap',None)
+        if immediate:
+            if pending:self.root.after_cancel(pending[0]);self.pending_tap=None
+            self.single_tap(event);return
+        if pending:
+            self.root.after_cancel(pending[0]);self.pending_tap=None
+            if now-pending[1]<=.3 and math.hypot(event.x-pending[2].x,event.y-pending[2].y)<=32*self.unit:
+                self.last_touch=now;self.selected=None;self.airport_selected=None
+                self.draw();return
+        # Capture hit positions now: moving targets may shift during the delay.
+        hits=tuple(self.hits);airports=tuple(self.airport_hits)
+        def finish():
+            self.pending_tap=None
+            self.single_tap(event,hits,airports)
+        token=self.root.after(300,finish)
+        self.pending_tap=(token,now,event)
+
+    def single_tap(self,event,hits=None,airport_hits=None):
         if time.monotonic()<self.splash_until:
             self.splash_until=0;self.last_touch=time.monotonic();self.draw();return
-        self.last_touch=time.monotonic()
-        if self.idle:
-            self.idle=False; self.draw(); return  # Wake touch must not activate a hidden control.
+        if not self.idle:self.last_touch=time.monotonic()
         x=(event.x-self.cx)/self.unit+400;y=(event.y-self.cy)/self.unit+400
         if self.exit_pending:
             if 410<=x<=555 and 435<=y<=485:
@@ -917,12 +947,14 @@ class Display:
             if x1<=x<=x2 and y1<=y<=y2:
                 if self.touch_debug:print(f"TOUCH ACTION {getattr(action,'__name__','button')}",flush=True)
                 action();return
-        if self.hits:
-            hx,hy,tail=min(self.hits,key=lambda item:math.hypot(event.x-item[0],event.y-item[1]))
+        hits=self.hits if hits is None else hits
+        airport_hits=self.airport_hits if airport_hits is None else airport_hits
+        if hits:
+            hx,hy,tail=min(hits,key=lambda item:math.hypot(event.x-item[0],event.y-item[1]))
             if math.hypot(event.x-hx,event.y-hy)<=28*self.unit:
                 self.selected=tail;self.draw();return
-        if self.airport_hits:
-            hx,hy,ident=min(self.airport_hits,key=lambda item:math.hypot(event.x-item[0],event.y-item[1]))
+        if airport_hits:
+            hx,hy,ident=min(airport_hits,key=lambda item:math.hypot(event.x-item[0],event.y-item[1]))
             if math.hypot(event.x-hx,event.y-hy)<=28*self.unit:
                 self.airport_selected=ident;self.airport_page=0;self.airport_runways=False;self.draw()
 

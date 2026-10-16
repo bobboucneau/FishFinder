@@ -30,6 +30,8 @@ class Tests(unittest.TestCase):
         obj.last_touch=time.monotonic()-20;obj.draw()
         with patch('sys.stdout',log):
             obj.tap(SimpleNamespace(x=269,y=721))
+            self.assertTrue(obj.idle);self.assertEqual(obj.radius_nm,10)
+            obj.tap(SimpleNamespace(x=269,y=721))
             self.assertFalse(obj.idle);self.assertEqual(obj.radius_nm,10)
             obj.tap(SimpleNamespace(x=269,y=721))
             self.assertEqual(obj.radius_nm,2)
@@ -41,6 +43,39 @@ class Tests(unittest.TestCase):
         self.assertIn('canvas=800x800',log.getvalue())
         self.assertIn('TOUCH ACTION',log.getvalue())
         self.assertEqual(obj.touch_mark[:2],(482,460))
+        obj.stop.set()
+
+    def test_hidden_object_tap_preserves_hidden_controls(self):
+        obj=gui();obj.last_touch=time.monotonic()-20;obj.draw()
+        x,y,tail=obj.hits[0]
+        obj.tap(SimpleNamespace(x=x,y=y))
+        self.assertIsNone(obj.selected)
+        obj.root.fire(obj.pending_tap[0])
+        self.assertEqual(obj.selected,tail);self.assertTrue(obj.idle)
+        self.assertEqual(obj.buttons,[])
+        obj.stop.set()
+
+    def test_double_tap_cancels_object_popup(self):
+        obj=gui();obj.last_touch=time.monotonic()-20;obj.draw()
+        x,y,tail=obj.hits[0]
+        obj.tap(SimpleNamespace(x=x,y=y))
+        token=obj.pending_tap[0]
+        obj.tap(SimpleNamespace(x=x+5,y=y+5))
+        self.assertIsNone(obj.pending_tap);self.assertIsNone(obj.selected)
+        self.assertNotIn(token,obj.root.callbacks);self.assertFalse(obj.idle)
+        obj.selected=tail;obj.last_touch=time.monotonic()-20;obj.draw()
+        obj.tap(SimpleNamespace(x=300,y=300));obj.tap(SimpleNamespace(x=300,y=300))
+        self.assertIsNone(obj.selected);self.assertFalse(obj.idle)
+        obj.stop.set()
+
+    def test_hide_vertical_setting_and_display(self):
+        self.assertFalse(settings.validate({})['hide_vertical'])
+        with self.assertRaises(ValueError):settings.validate({'hide_vertical':'yes'})
+        obj=gui();obj.config['hide_vertical']=True
+        with patch.object(d,'vertical_clear',return_value=True):obj.draw()
+        self.assertFalse(obj.hits)
+        with patch.object(d,'vertical_clear',return_value=False):obj.draw()
+        self.assertTrue(obj.hits)
         obj.stop.set()
 
     def test_ground_map_preference_saved_and_applied(self):
@@ -105,7 +140,8 @@ class Tests(unittest.TestCase):
         self.assertTrue(all(' · ' not in label for label in airport_labels))
         self.assertTrue(display.hits)
         display.tap(SimpleNamespace(x=400,y=770))
-        self.assertFalse(display.idle);self.assertFalse(display.exit_pending)
+        self.assertTrue(display.idle);self.assertFalse(display.exit_pending)
+        display.tap(SimpleNamespace(x=400,y=770));self.assertFalse(display.idle)
         display.tap(SimpleNamespace(x=400,y=770));self.assertTrue(display.exit_pending)
 
     def test_parallel_runways_without_changing_cache(self):

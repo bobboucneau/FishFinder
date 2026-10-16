@@ -39,7 +39,7 @@ class Setup:
         fields=([('default_range','Range (NM)'),('orientation','Map orientation'),('ownship_symbol','Ownship airplane'),
                  ('horizon_minutes','Projection (minutes)'),('idle_seconds','Hide controls (seconds)'),('trail_seconds','Trail (seconds)')]
                 if index==0 else [('stratux_ip','Stratux IP'),('own_tail','Your tail number'),
-                                  ('ownship_source','Ownship preference'),('vertical_threshold_ft','Gray beyond (feet)')])
+                                  ('ownship_source','Ownship preference'),('vertical_threshold_ft','Altitude limit (feet)')])
         form=tk.Frame(self.page,bg=BG);form.pack()
         choices={'default_range':('2','5','10','20'),'orientation':('track-up','north-up'),
                  'ownship_symbol':('high-wing','low-wing','twin'),'ownship_source':('adsb-first','stratux-first')}
@@ -51,7 +51,7 @@ class Setup:
                 widget.bind('<Button-1>',lambda event,w=widget:self.show_keyboard(w))
             widget.grid(row=row,column=1,padx=7,pady=2)
         if index==0:
-            for key,label in [('vertical_filter','Gray vertically distant aircraft'),('airports_visible','Show airports'),('ground_map','Show ground map (experiment)')]:
+            for key,label in [('vertical_filter','Gray vertically distant aircraft'),('hide_vertical','Hide vertically distant aircraft'),('airports_visible','Show airports'),('ground_map','Show ground map (experiment)')]:
                 tk.Checkbutton(self.page,text=label,variable=self.vars[key],bg=BG,fg=FG,selectcolor=BG,
                                activebackground=BG,borderwidth=0,highlightthickness=0,relief='flat').pack(anchor='w',padx=12)
         else:

@@ -6,7 +6,7 @@ from pathlib import Path
 import tempfile
 
 DEFAULTS = dict(stratux_ip='192.168.10.1', own_tail='', default_range=10,
-                idle_seconds=10, vertical_threshold_ft=5000, vertical_filter=True,
+                idle_seconds=10, vertical_threshold_ft=5000, vertical_filter=True, hide_vertical=False,
                 horizon_minutes=2, orientation='track-up', ownship_symbol='high-wing', ownship_source='adsb-first', airports_visible=True, ground_map=False, trail_seconds=300)
 SETTINGS_PATH = Path(os.environ.get('FISHFINDER_SETTINGS', str(Path(__file__).resolve().parent/'settings.json')))
 
@@ -29,7 +29,7 @@ def validate(values):
     if result['ownship_source'] not in ('adsb-first','stratux-first'):raise ValueError('Ownship source: choose adsb-first or stratux-first')
     result['default_range']=int(result['default_range'])
     if result['default_range'] not in (2,5,10,20): raise ValueError('Range must be 2, 5, 10 or 20 NM')
-    for key in ('vertical_filter','airports_visible','ground_map'):
+    for key in ('vertical_filter','hide_vertical','airports_visible','ground_map'):
         if not isinstance(result[key],bool): raise ValueError(f'{key}: expected on/off')
     return result
 

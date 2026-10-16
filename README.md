@@ -1,3 +1,5 @@
+v0.4.15 adds single-tap object information, double-tap controls, optional altitude-based traffic hiding, and clearer map attribution. See [RELEASE-0.4.15.md](RELEASE-0.4.15.md).
+
 v0.4.14 adds the richer offline worldwide landmark experiment: water outlines and streams, roads, railways, settlements, matching muted-blue water, and curved rim attribution. Map data is installed separately and kept outside GitHub. See [RICH-MAP.md](RICH-MAP.md) for installation, measured storage, and Pi testing.
 
 v0.4.13 adds an optional 35.43 MB worldwide ground-reference map, amber roads, dashed violet railways and cyan rivers. The data stays outside GitHub. See [WORLD-MAP.md](WORLD-MAP.md) for installation, measured storage, and important detail limits.
