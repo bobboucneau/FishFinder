@@ -341,6 +341,8 @@ class Display:
         self.selected=None; self.hits=[]; self.buttons=[]
         self.exit_pending=False
         self.catalog=AirportCatalog(args.airports)
+        from update_airports import AutomaticUpdates
+        self.airport_updates=None if args.demo else AutomaticUpdates(args.airports)
         self.airport_selected=None; self.airport_runways=False; self.airport_page=0
         self.airports_visible=self.config['airports_visible']; self.airport_hits=[]; self.airport_buttons=[]
         self.airport_query=None; self.airport_query_time=0.0; self.near_airports=[]
@@ -383,7 +385,7 @@ class Display:
 
     def rim_attribution(self,text):
         """Readable text along the inside of the lower-right circular rim."""
-        font=('DejaVu Sans',max(8,int(8*self.unit)))
+        font=('DejaVu Sans',max(10,int(10*self.unit)))
         key=(text,font)
         if getattr(self,'rim_key',None)!=key:
             if isinstance(self.root,tk.Misc):
@@ -437,6 +439,14 @@ class Display:
         flush()
 
     def tick(self):
+        if self.airport_updates:
+            result=self.airport_updates.poll()
+            if result:
+                success,message=result
+                print(message,flush=True)
+                if success:
+                    self.catalog=AirportCatalog(self.args.airports);self.airport_query=None
+                    if self.airport_selected not in self.catalog.airports:self.airport_selected=None
         if self.args.demo:
             self.snapshot=demo_snapshot(self.args.no_ownship)
         else:
@@ -741,46 +751,15 @@ class Display:
 
     def airport_action(self,action):
         if action=='close': self.airport_selected=None
+        elif action.startswith('runway:'): self.airport_runway_index=int(action.split(':')[1])
         elif action=='view': self.airport_runways=not self.airport_runways;self.airport_page=0
         elif action=='next': self.airport_page+=1
         elif action=='prev': self.airport_page=max(0,self.airport_page-1)
         self.draw()
 
     def airport_details(self):
-        a=self.catalog.airports[self.airport_selected]
-        self.airport_buttons=[]
-        self.rect(176,205,624,620,fill='#07131f',outline=BLUE,width=2)
-        self.text(400,233,a['code'],fill=BLUE,size=20)
-        self.text(400,264,a['name'],size=12,width=420*self.unit)
-        self.text(400,594,'Reference only — verify with current charts',fill=YELLOW,size=10)
-        updated,stale=freshness_label(self.catalog.date)
-        self.text(400,610,updated,fill=YELLOW if stale else MUTED,size=9)
-        if self.airport_runways:
-            self.draw_runways(a)
-        else:
-            altitude=a.get('elevation_ft') or 'unknown'
-            distance=math.hypot(*xy(a['lat'],a['lon'],self.airport_origin)) if self.airport_origin else None
-            self.text(400,297,f"Elevation: {altitude} ft MSL",size=12)
-            label='ownship' if self.airport_fix else 'reference (no own GPS)'
-            self.text(400,321,f'Range: {distance:.2f} NM to {label}' if distance is not None else 'Range unavailable',size=11)
-            rows=[]
-            for r in a.get('runways',[]):
-                status=' · CLOSED in dataset' if r.get('closed')=='1' else ''
-                rows.append(f"RWY {r.get('le_ident') or '?'} / {r.get('he_ident') or '?'} · {r.get('length_ft') or '?'} × {r.get('width_ft') or '?'} ft · {r.get('surface') or '?'}{status}")
-            for f in a.get('frequencies',[]):
-                rows.append(f"{f.get('type') or 'Radio'}: {f.get('frequency_mhz') or '?'} MHz · {f.get('description') or ''}")
-            if not rows: rows=['No runway or frequency details in dataset']
-            pages=max(1,math.ceil(len(rows)/6)); self.airport_page=min(self.airport_page,pages-1)
-            for i,line in enumerate(rows[self.airport_page*6:(self.airport_page+1)*6]):
-                self.text(400,352+i*26,line if len(line)<=64 else line[:63]+'…',size=10,width=420*self.unit)
-            self.text(400,510,f'Page {self.airport_page+1}/{pages}',fill=MUTED,size=9)
-            self.airport_button(210,525,295,568,'Prev','prev',enabled=self.airport_page>0)
-            self.airport_button(505,525,590,568,'Next','next',enabled=self.airport_page<pages-1)
-        if self.airport_runways:
-            self.airport_button(210,525,295,568,'Prev','prev',enabled=False)
-            self.airport_button(505,525,590,568,'Next','next',enabled=False)
-        self.airport_button(303,525,395,568,'Details' if self.airport_runways else 'Runways','view')
-        self.airport_button(405,525,497,568,'Close','close')
+        from airport_reference import draw
+        draw(self,self.catalog.airports[self.airport_selected])
 
     def airport_button(self,x1,y1,x2,y2,label,action,enabled=True):
         self.rect(x1,y1,x2,y2,fill='#10253d' if enabled else '#111b24',outline=BLUE if enabled else '#35434f')
@@ -936,8 +915,6 @@ class Display:
             for x1,y1,x2,y2,action in self.airport_buttons:
                 if x1<=x<=x2 and y1<=y<=y2:
                     self.airport_action(action);return
-            if not (176<=x<=624 and 205<=y<=620):
-                self.airport_selected=None;self.draw()
             return
         if self.selected:
             if 322<=x<=478 and 571<=y<=602 or not(176<=x<=624 and 209<=y<=614):
@@ -956,7 +933,7 @@ class Display:
         if airport_hits:
             hx,hy,ident=min(airport_hits,key=lambda item:math.hypot(event.x-item[0],event.y-item[1]))
             if math.hypot(event.x-hx,event.y-hy)<=28*self.unit:
-                self.airport_selected=ident;self.airport_page=0;self.airport_runways=False;self.draw()
+                self.airport_selected=ident;self.airport_runway_index=None;self.airport_page=0;self.airport_runways=False;self.draw()
 
 
 def main():
@@ -984,7 +961,10 @@ def main():
         args.db='/var/local/FishFinder/demo_objects.db'
     # Internally this flag remains the legacy sample renderer.
     args.demo=args.sample_demo
-    root=tk.Tk();Display(root,args);root.mainloop()
+    import signal
+    root=tk.Tk();display=Display(root,args)
+    signal.signal(signal.SIGTERM,lambda *_:root.after(0,display.close))
+    root.mainloop()
 
 
 if __name__=='__main__':

@@ -120,5 +120,5 @@ def freshness_label(download_date, today=None):
     if age < 0:
         return f'Last updated: {download_date} — check device clock', True
     suffix=f'{age} days old' if age != 1 else '1 day old'
-    if age > 30: suffix+=' · refresh recommended'
-    return f'Last updated: {download_date} · {suffix}', age > 30
+    if age >= 28: suffix+=' · refresh recommended'
+    return f'Last updated: {download_date} · {suffix}', age >= 28

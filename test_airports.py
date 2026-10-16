@@ -109,7 +109,7 @@ class Tests(unittest.TestCase):
 
     def test_no_fix_and_stationary_and_no_cache(self):
         d=gui(True);self.assertIsNone(d.airport_track)
-        d.airport_selected='KRHV';d.airport_runways=True;d.draw()
+        d.airport_selected='KCPU';d.airport_runways=False;d.draw()
         labels=[k.get('text','') for _,_,k in d.canvas.commands]
         self.assertTrue(any('NORTH UP' in t for t in labels))
         d=gui(path='not-there.json');self.assertTrue(d.catalog.error);self.assertTrue(d.hits)

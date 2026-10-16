@@ -1,3 +1,5 @@
+v0.4.16 adds a full-screen airport quick reference, FAA pattern enrichment with MSL altitude provenance, combined 28-day airport updates, and larger map attribution. See [AIRPORT-REFERENCE.md](AIRPORT-REFERENCE.md).
+
 v0.4.15 adds single-tap object information, double-tap controls, optional altitude-based traffic hiding, and clearer map attribution. See [RELEASE-0.4.15.md](RELEASE-0.4.15.md).
 
 v0.4.14 adds the richer offline worldwide landmark experiment: water outlines and streams, roads, railways, settlements, matching muted-blue water, and curved rim attribution. Map data is installed separately and kept outside GitHub. See [RICH-MAP.md](RICH-MAP.md) for installation, measured storage, and Pi testing.

@@ -54,7 +54,7 @@ def build(airports, runways, frequencies, countries=()):
     return dict(schema=1, downloaded_utc=datetime.now(timezone.utc).isoformat(), source='OurAirports', countries=list(countries), airports=list(result.values()))
 
 
-def refresh(output, countries=None):
+def _refresh(output, countries=None):
     output=Path(output)
     problem=write_problem(output,atomic=True)
     if problem:raise PermissionError(problem)
@@ -72,6 +72,10 @@ def refresh(output, countries=None):
         raise ValueError('No runway records; old cache retained')
     if not any(a['frequencies'] for a in data['airports']):
         raise ValueError('No frequency records; old cache retained')
+    if any(a.get('country')=='US' for a in data['airports']):
+        from faa_airports import fetch_enrichment
+        fetch_enrichment(data)
+    data['update_interval_days']=28
     output.parent.mkdir(parents=True,exist_ok=True)
     temp = None
     try:
@@ -83,6 +87,50 @@ def refresh(output, countries=None):
     finally:
         if temp is not None and temp.exists(): temp.unlink()
     return len(data['airports'])
+
+
+
+def refresh(output,countries=None):
+    import fcntl
+    output=Path(output)
+    problem=write_problem(output,atomic=True)
+    if problem:raise PermissionError(problem)
+    with output.with_suffix('.update.lock').open('a') as lock:
+        try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
+        except BlockingIOError:raise RuntimeError('Airport update already in progress') from None
+        return _refresh(output,countries)
+
+def update_due(output,today=None):
+    from datetime import date,timedelta
+    today=today or datetime.now(timezone.utc).date()
+    try:
+        data=json.loads(Path(output).read_text())
+        downloaded=date.fromisoformat(data['downloaded_utc'][:10])
+        if downloaded>today or today-downloaded>=timedelta(days=28):return True
+        if any(a.get('country')=='US' for a in data['airports']):
+            faa=data.get('faa',{})
+            return not(date.fromisoformat(faa['effective'])<=today<date.fromisoformat(faa['expires']))
+        return False
+    except (OSError,ValueError,KeyError,TypeError):return True
+
+class AutomaticUpdates:
+    """Daily due check; network/update work runs off the UI thread. No Wi-Fi changes."""
+    def __init__(self,path):
+        import queue
+        self.path=path;self.next_check=0;self.results=queue.Queue();self.busy=False
+    def poll(self):
+        import threading,time,queue
+        if time.monotonic()>=self.next_check and not self.busy:
+            self.next_check=time.monotonic()+86400;self.busy=True
+            def work():
+                try:
+                    if update_due(self.path):
+                        refresh(self.path);self.results.put((True,'Airport reference data updated.'))
+                except Exception as exc:self.results.put((False,f'Airport update deferred: {exc}'))
+                finally:self.busy=False
+            threading.Thread(target=work,daemon=True,name='airport-auto-update').start()
+        try:return self.results.get_nowait()
+        except queue.Empty:return None
 
 
 def main():
