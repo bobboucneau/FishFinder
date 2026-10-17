@@ -1,3 +1,5 @@
+v0.4.18 changes pattern arrows to bright red and adds a persistent running-version label. Focused validation: 32 tests passed, including red-arrow rendering and version visibility with the map off and controls hidden.
+
 v0.4.17 changes pattern symbols to brighter, thicker cyan U-shaped arrows. Each final leg aims toward its runway threshold. Eight airport-reference tests pass, including arrow direction/side checks for four headings; the native O22 preview was inspected. Pi touch/readability testing of this revision remains outstanding.
 
 # Airport quick reference — v0.4.16

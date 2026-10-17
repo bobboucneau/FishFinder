@@ -172,7 +172,7 @@ def diagram(d,a,selected):
                 if all(distance(pos,a,b)>18 for a,b in screen_segments) and all(math.dist(pos,other[:2])>28 for other in label_positions):break
             label_positions.append((*pos,end,color))
             if chosen and direction and not schematic and r.get('closed')!='1':
-                line(pattern_arrow(point,heading,direction),fill='#79f3ff',width=4*d.unit,
+                line(pattern_arrow(point,heading,direction),fill='#ff3030',width=4*d.unit,
                      arrow='last',arrowshape=(12*d.unit,15*d.unit,6*d.unit),capstyle='round',joinstyle='round')
     for x,y,end,color in label_positions:d.text(x,y,end,size=13,fill=color)
     d.text(400,579,f"RWY {selected.get('le_ident','?')}/{selected.get('he_ident','?')} · {selected.get('length_ft') or '?'} × {selected.get('width_ft') or '?'} ft",size=12)

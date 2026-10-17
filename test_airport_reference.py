@@ -71,6 +71,16 @@ class Tests(unittest.TestCase):
         obj.airport_action('view');self.assertTrue(obj.airport_runways)
         obj.airport_action('close');self.assertIsNone(obj.airport_selected)
         obj.stop.set()
+    def test_red_arrows_and_persistent_version(self):
+        obj=gui();obj.airport_selected='KO22';obj.draw()
+        arrows=[kw for name,_,kw in obj.canvas.commands if name=='create_line' and kw.get('arrow')=='last']
+        self.assertTrue(arrows);self.assertTrue(all(kw['fill']=='#ff3030' for kw in arrows))
+        self.assertTrue(any(kw.get('tags')=='map-attribution' for _,_,kw in obj.canvas.commands))
+        obj.airport_selected=None;obj.ground_level=0;obj.last_touch=0;obj.draw()
+        chars=''.join(kw.get('text','') for _,_,kw in obj.canvas.commands if kw.get('tags')=='map-attribution')
+        self.assertEqual(chars,'v'+obj.version)
+        obj.stop.set()
+
     def test_standard_and_runway_specific_altitude(self):
         obj=gui();a=obj.catalog.airports['KCPU']
         a=dict(a,reference=dict(a['reference'],effective=datetime.now(timezone.utc).date().isoformat(),expires=(datetime.now(timezone.utc).date()+timedelta(days=28)).isoformat()))

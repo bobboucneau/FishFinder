@@ -1,3 +1,5 @@
+v0.4.18 makes pattern arrows bright red and shows the running version along the rim, immediately before map attribution when the map is visible. The version also persists with controls hidden, the map off, or an airport reference open.
+
 v0.4.17 makes airport pattern arrows brighter and U-shaped, pointing toward their runway ends.
 
 v0.4.16 adds a full-screen airport quick reference, FAA pattern enrichment with MSL altitude provenance, combined 28-day airport updates, and larger map attribution. See [AIRPORT-REFERENCE.md](AIRPORT-REFERENCE.md).

@@ -6,6 +6,7 @@ python3 traffic_display.py --fullscreen
 All GUI operations stay on Tk's main thread; database reads run separately.
 """
 import argparse
+import json
 import settings
 import demo_ground
 import setup_screen
@@ -328,6 +329,8 @@ class Display:
         self.stop=threading.Event(); self.out=queue.Queue(maxsize=1)
         self.snapshot=Snapshot({},[])
         self.config=settings.load()
+        try:self.version=json.loads((Path(__file__).resolve().parent/'VERSION.json').read_text())['version']
+        except (OSError,ValueError,KeyError):self.version='unknown'
         from fs_checks import write_problem
         self.permission_issues=[issue for issue in (write_problem(settings.SETTINGS_PATH,atomic=True),write_problem(args.airports,atomic=True)) if issue]
         self.radius_nm=args.range if args.range is not None else self.config['default_range']
@@ -682,7 +685,6 @@ class Display:
                 self.rect(195,365,605,435,fill='#071710',outline=YELLOW)
                 self.text(400,400,message,fill=YELLOW,size=16,width=390*self.unit)
         if self.ground and ground_allowed and self.ground_level:
-            self.rim_attribution('Natural Earth' if self.ground_global and self.ground_path.suffix=='.sqlite' else 'Map data © OpenStreetMap contributors')
             notice='Map unavailable' if self.ground.error else 'Map loading...' if self.ground_image is None or time.monotonic()-self.ground_image_time>3 else 'Map coverage partial' if origin and self.ground.bounds and not self.ground.covers(origin,self.radius_nm) else ''
             if notice:self.text(400,585,notice,fill=MUTED,size=9)
         if self.permission_issues:
@@ -691,6 +693,10 @@ class Display:
             self.details(infos.get(self.selected))
         if self.airport_selected:
             self.airport_details()
+        attribution=''
+        if not self.airport_selected and self.ground and ground_allowed and self.ground_level:
+            attribution='Natural Earth' if self.ground_global and self.ground_path.suffix=='.sqlite' else 'Map data © OpenStreetMap contributors'
+        self.rim_attribution('v'+self.version+(' · '+attribution if attribution else ''))
         if self.touch_debug and self.touch_mark and time.monotonic()-self.touch_mark[2]<3:
             tx,ty,_=self.touch_mark
             c.create_oval(tx-5,ty-5,tx+5,ty+5,outline='#ff88ff',width=2)
