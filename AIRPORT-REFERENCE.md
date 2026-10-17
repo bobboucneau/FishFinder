@@ -1,3 +1,5 @@
+v0.4.17 changes pattern symbols to brighter, thicker cyan U-shaped arrows. Each final leg aims toward its runway threshold. Eight airport-reference tests pass, including arrow direction/side checks for four headings; the native O22 preview was inspected. Pi touch/readability testing of this revision remains outstanding.
+
 # Airport quick reference — v0.4.16
 
 Tap an airport for a full-screen reference. Back to traffic returns to the scope.

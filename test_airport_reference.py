@@ -25,6 +25,22 @@ class Tests(unittest.TestCase):
                 text=io.StringIO();w=csv.DictWriter(text,fieldnames=rows[0]);w.writeheader();w.writerows(rows);z.writestr(name,text.getvalue())
         return stream.getvalue()
     def candidate(self):return dict(airports=[dict(ident='KCPU',code='KCPU',country='US',lat=38.146,lon=-120.648)])
+    def test_u_arrows_point_to_threshold_on_correct_pattern_side(self):
+        import math
+        for heading in ((0,-1),(1,0),(0,1),(-1,0)):
+            for direction in ('Left','Right'):
+                threshold=(400,450);points=ref.pattern_arrow(threshold,heading,direction)
+                tip=points[-1];before=points[-2]
+                self.assertAlmostEqual(math.dist(tip,threshold),7)
+                tangent=(tip[0]-before[0],tip[1]-before[1])
+                self.assertGreater(tangent[0]*heading[0]+tangent[1]*heading[1],0)
+                self.assertAlmostEqual(tangent[0]*heading[1]-tangent[1]*heading[0],0)
+                right=(-heading[1],heading[0])
+                offset=(points[0][0]-threshold[0],points[0][1]-threshold[1])
+                self.assertGreater((offset[0]*right[0]+offset[1]*right[1])*(1 if direction=='Right' else -1),0)
+                downwind=(points[1][0]-points[0][0],points[1][1]-points[0][1])
+                self.assertLess(downwind[0]*heading[0]+downwind[1]*heading[1],0)
+
     def test_effective_cycle_not_preview(self):
         html='<a href="/air_traffic/flight_info/aeronav/Aero_Data/NASR_Subscription/2026-10-29/">preview</a><a href="/air_traffic/flight_info/aeronav/Aero_Data/NASR_Subscription/2026-10-01/">current</a>'
         self.assertEqual(faa.cycle_links(html,date(2026,10,16))[0],date(2026,10,1))

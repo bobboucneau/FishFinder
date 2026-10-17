@@ -123,6 +123,20 @@ def detail_page(d,a):
     d.airport_button(245,580,375,625,'Prev','prev',enabled=d.airport_page>0)
     d.airport_button(425,580,555,625,'Next','next',enabled=d.airport_page<pages-1)
 
+
+def pattern_arrow(point,heading,direction):
+    """A downwind/base/final U symbol; the final tangent aims at the threshold."""
+    x,y=point;hx,hy=heading
+    sign=1 if direction=='Right' else -1
+    side=(-hy*sign,hx*sign);radius=16
+    center=(x-hx*26+side[0]*radius,y-hy*26+side[1]*radius)
+    points=[(x+side[0]*32+hx*8,y+side[1]*32+hy*8)]
+    points.extend((center[0]+radius*(side[0]*math.cos(t)-hx*math.sin(t)),
+                   center[1]+radius*(side[1]*math.cos(t)-hy*math.sin(t)))
+                  for t in (i*math.pi/24 for i in range(25)))
+    points.append((x-hx*7,y-hy*7))
+    return points
+
 def diagram(d,a,selected):
     from traffic_display import xy
     segments=runway_segments(dict(a,runways=runways(a)),xy)
@@ -130,8 +144,8 @@ def diagram(d,a,selected):
         d.text(400,440,'Runway geometry unavailable',size=16);return
     points=[v for _,p,q,_ in segments for v in (p,q)]
     mid=((min(v[0] for v in points)+max(v[0] for v in points))/2,(min(v[1] for v in points)+max(v[1] for v in points))/2)
-    scale=min(390/max(.01,max(v[0] for v in points)-min(v[0] for v in points)),150/max(.01,max(v[1] for v in points)-min(v[1] for v in points)))
-    def screen(v):return (400+(v[0]-mid[0])*scale,454-(v[1]-mid[1])*scale)
+    scale=min(390/max(.01,max(v[0] for v in points)-min(v[0] for v in points)),140/max(.01,max(v[1] for v in points)-min(v[1] for v in points)))
+    def screen(v):return (400+(v[0]-mid[0])*scale,450-(v[1]-mid[1])*scale)
     def line(points,**kw):
         coords=[n for x,y in points for n in (d.cx+(x-400)*d.unit,d.cy+(y-400)*d.unit)]
         d.canvas.create_line(*coords,**kw)
@@ -158,10 +172,8 @@ def diagram(d,a,selected):
                 if all(distance(pos,a,b)>18 for a,b in screen_segments) and all(math.dist(pos,other[:2])>28 for other in label_positions):break
             label_positions.append((*pos,end,color))
             if chosen and direction and not schematic and r.get('closed')!='1':
-                side=(-heading[1],heading[0]);side=tuple(n*(1 if direction=='Right' else -1) for n in side)
-                center=(x-heading[0]*24+side[0]*15,y-heading[1]*24+side[1]*15)
-                curve=[(center[0]+15*(-side[0]*math.cos(t)+heading[0]*math.sin(t)),center[1]+15*(-side[1]*math.cos(t)+heading[1]*math.sin(t))) for t in [i*math.pi/16 for i in range(14)]]
-                line(curve,fill='#62b6ff',width=3*d.unit,smooth=True,arrow='last',arrowshape=(10*d.unit,12*d.unit,5*d.unit))
+                line(pattern_arrow(point,heading,direction),fill='#79f3ff',width=4*d.unit,
+                     arrow='last',arrowshape=(12*d.unit,15*d.unit,6*d.unit),capstyle='round',joinstyle='round')
     for x,y,end,color in label_positions:d.text(x,y,end,size=13,fill=color)
     d.text(400,579,f"RWY {selected.get('le_ident','?')}/{selected.get('he_ident','?')} · {selected.get('length_ft') or '?'} × {selected.get('width_ft') or '?'} ft",size=12)
 
