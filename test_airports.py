@@ -50,6 +50,19 @@ def gui(no_ownship=False,path='airports.json'):
 
 
 class Tests(unittest.TestCase):
+    def test_ownship_tap_and_stale_details(self):
+        d=gui();d.tap(SimpleNamespace(x=400,y=400));d.root.fire(d.pending_tap[0])
+        self.assertEqual(d.selected,'__ownship__')
+        labels=[kw.get('text','') for _,_,kw in d.canvas.commands]
+        self.assertIn('Ownship',labels)
+        self.assertTrue(any(v.startswith('Course:') and 'true' in v for v in labels))
+        self.assertTrue(any(v.startswith('Ground speed:') for v in labels))
+        self.assertTrue(any(v.startswith('Altitude:') for v in labels))
+        d.canvas.commands=[];d.ownship_details(None,[],time.time())
+        self.assertTrue(any('no longer fresh' in kw.get('text','') for _,_,kw in d.canvas.commands))
+        missing=gui(True)
+        self.assertFalse(any(h[2]=='__ownship__' for h in missing.hits))
+
     def test_freshness(self):
         self.assertFalse(ad.freshness_label('2026-10-06',date(2026,10,6))[1])
         self.assertTrue(ad.freshness_label('2026-10-06',date(2026,11,7))[1])

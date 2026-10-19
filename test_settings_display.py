@@ -73,9 +73,9 @@ class Tests(unittest.TestCase):
         with self.assertRaises(ValueError):settings.validate({'hide_vertical':'yes'})
         obj=gui();obj.config['hide_vertical']=True
         with patch.object(d,'vertical_clear',return_value=True):obj.draw()
-        self.assertFalse(obj.hits)
+        self.assertFalse([hit for hit in obj.hits if hit[2]!='__ownship__'])
         with patch.object(d,'vertical_clear',return_value=False):obj.draw()
-        self.assertTrue(obj.hits)
+        self.assertTrue([hit for hit in obj.hits if hit[2]!='__ownship__'])
         obj.stop.set()
 
     def test_ground_map_preference_saved_and_applied(self):

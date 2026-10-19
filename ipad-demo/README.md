@@ -1,3 +1,5 @@
+Web v0.1.1 centers runway choices, uses an original straight-wing GA ownship symbol, and adds live ownship details on a single tap.
+
 # FishFinder iPad usability demo 0.1.0
 
 Static, touch-friendly browser demo based on Pi v0.4.18. Intended for early

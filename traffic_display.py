@@ -561,6 +561,7 @@ class Display:
                 boxes.append(box)
         if origin:
             if fix:
+                self.hits.append((self.cx,self.cy,'__ownship__'))
                 self.trail_lines([xy(p.lat,p.lon,origin) for p in own],WHITE,tags="ownship-trail")
                 if ov is not None:
                     self.line((0,0),(ov[0]*self.projection_seconds,ov[1]*self.projection_seconds),WHITE,dash=(4,5),width=1,tags="ownship-projection")
@@ -690,7 +691,7 @@ class Display:
         if self.permission_issues:
             self.text(400,620,'Write access needs attention · see Setup',fill=YELLOW,size=10,width=330*self.unit)
         if self.selected:
-            self.details(infos.get(self.selected))
+            self.ownship_details(fix,own,now) if self.selected=='__ownship__' else self.details(infos.get(self.selected))
         if self.airport_selected:
             self.airport_details()
         attribution=''
@@ -818,6 +819,24 @@ class Display:
 
     def recenter(self):
         self.anchor=None;self.last_own=None;self.draw()
+
+    def ownship_details(self,fix,history,now):
+        self.rect(176,209,624,614,fill='#071710',outline=WHITE,width=2)
+        self.text(400,241,'Ownship',size=22)
+        if fix:
+            movement=velocity(history)
+            heading=math.degrees(math.atan2(movement[0],movement[1]))%360 if movement is not None and math.hypot(*movement)>1e-10 else None
+            lines=[f'Altitude: {fix.altitude:,.0f} ft' if fix.altitude is not None else 'Altitude: unavailable',
+                   f'Ground speed: {fix.speed:.0f} kt',
+                   'Course: unavailable' if heading is None else f'Course: {heading:.0f}° true · ground track',
+                   f'Position age: {max(0,now-fix.time):.1f} seconds',
+                   f'Source: {self.own_source}']
+            for i,line in enumerate(lines):self.text(400,295+i*35,line,size=12)
+            self.text(400,513,'Course is over the ground, not magnetic heading.',fill=MUTED,size=10,width=390*self.unit)
+        else:
+            self.text(400,390,'Ownship position is no longer fresh',fill=YELLOW,size=12)
+        self.rect(322,571,478,602,fill='#183b2d',outline=GREEN)
+        self.text(400,587,'Close',size=12)
 
     def details(self,info):
         self.rect(176,209,624,614,fill='#071710',outline=WHITE,width=2)
