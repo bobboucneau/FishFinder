@@ -51,7 +51,8 @@ def gui(no_ownship=False,path='airports.json'):
 
 class Tests(unittest.TestCase):
     def test_ownship_tap_and_stale_details(self):
-        d=gui();d.tap(SimpleNamespace(x=400,y=400));d.root.fire(d.pending_tap[0])
+        d=gui();d.hits=[(400,400,'__ownship__')];d.airport_hits=[]
+        d.tap(SimpleNamespace(x=400,y=400));d.root.fire(d.pending_tap[0])
         self.assertEqual(d.selected,'__ownship__')
         labels=[kw.get('text','') for _,_,kw in d.canvas.commands]
         self.assertIn('Ownship',labels)
@@ -62,6 +63,23 @@ class Tests(unittest.TestCase):
         self.assertTrue(any('no longer fresh' in kw.get('text','') for _,_,kw in d.canvas.commands))
         missing=gui(True)
         self.assertFalse(any(h[2]=='__ownship__' for h in missing.hits))
+
+    def test_target_choice_paging_cancel_and_airport_selection(self):
+        d=gui();d.last_touch=time.monotonic()-20;d.draw()
+        d.hits=[(400,400,f'test{i}') for i in range(6)]
+        d.airport_hits=[(401,401,'KRHV')]
+        d.tap(SimpleNamespace(x=400,y=400));d.root.fire(d.pending_tap[0])
+        self.assertEqual(len(d.target_choices),7);self.assertIsNone(d.selected)
+        before=list(d.target_choices);d.draw();self.assertEqual(d.target_choices,before)
+        def press(action):
+            x1,y1,x2,y2,_=next(b for b in d.choice_buttons if b[-1]==action)
+            d.tap(SimpleNamespace(x=(x1+x2)/2,y=(y1+y2)/2))
+        press('next');self.assertEqual(d.choice_page,1)
+        press(6);self.assertEqual(d.airport_selected,'KRHV');self.assertFalse(d.target_choices)
+        d.airport_action('close');d.target_choices=before;d.draw()
+        press('cancel');self.assertFalse(d.target_choices);self.assertIsNone(d.selected)
+        d.single_tap(SimpleNamespace(x=400,y=400),[(400,400,'test0')],[])
+        self.assertEqual(d.selected,'test0')
 
     def test_freshness(self):
         self.assertFalse(ad.freshness_label('2026-10-06',date(2026,10,6))[1])
@@ -112,9 +130,12 @@ class Tests(unittest.TestCase):
         d.airport_action('view');self.assertTrue(d.airport_runways)
         d.draw();self.assertTrue(d.airport_buttons)
         d.airport_action('close');self.assertIsNone(d.airport_selected)
-        # Traffic must win when an airport lies under its touch target.
+        # Overlapping aircraft and airport now offer an explicit choice.
         tx,ty,tail=d.hits[0];d.airport_hits=[(tx,ty,'KRHV')]
-        d.tap(SimpleNamespace(x=tx,y=ty));d.root.fire(d.pending_tap[0]);self.assertEqual(d.selected,tail)
+        d.tap(SimpleNamespace(x=tx,y=ty));d.root.fire(d.pending_tap[0])
+        self.assertTrue(d.target_choices);self.assertIsNone(d.selected)
+        choice=next(v for v in d.target_choices if v[1:] == ('aircraft',tail))
+        d.select_target(choice);self.assertEqual(d.selected,tail)
         d.selected=None;d.toggle_airports();self.assertEqual(d.airport_hits,[])
         # Dataset remains available for selected details after changing range.
         d.airport_selected='KSJC';d.airport_runways=False;d.airport_page=100;d.airport_details()

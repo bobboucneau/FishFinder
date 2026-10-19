@@ -48,6 +48,7 @@ class Tests(unittest.TestCase):
     def test_hidden_object_tap_preserves_hidden_controls(self):
         obj=gui();obj.last_touch=time.monotonic()-20;obj.draw()
         x,y,tail=obj.hits[0]
+        obj.hits=[(x,y,tail)];obj.airport_hits=[]
         obj.tap(SimpleNamespace(x=x,y=y))
         self.assertIsNone(obj.selected)
         obj.root.fire(obj.pending_tap[0])
@@ -58,6 +59,7 @@ class Tests(unittest.TestCase):
     def test_double_tap_cancels_object_popup(self):
         obj=gui();obj.last_touch=time.monotonic()-20;obj.draw()
         x,y,tail=obj.hits[0]
+        obj.hits=[(x,y,tail)];obj.airport_hits=[]
         obj.tap(SimpleNamespace(x=x,y=y))
         token=obj.pending_tap[0]
         obj.tap(SimpleNamespace(x=x+5,y=y+5))

@@ -1,3 +1,5 @@
+v0.4.20 adds a touch target chooser for overlapping aircraft and airports, with four large choices per page, Prev/Next, and Cancel. Isolated targets open directly. Mac automated checks passed; physical Pi testing is pending.
+
 v0.4.19 adds single-tap ownship details: altitude, groundspeed, true ground course, position age and source. A stale ownship fix is explicitly unavailable. Mac display tests passed; physical Pi validation is pending.
 
 v0.4.18 makes pattern arrows bright red and shows the running version along the rim, immediately before map attribution when the map is visible. The version also persists with controls hidden, the map off, or an airport reference open.

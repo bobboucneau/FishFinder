@@ -341,6 +341,7 @@ class Display:
         global TRAIL_AGE
         self.projection_seconds=self.config['horizon_minutes']*60
         TRAIL_AGE=self.config['trail_seconds']
+        self.target_choices=[]; self.choice_page=0; self.choice_buttons=[]
         self.selected=None; self.hits=[]; self.buttons=[]
         self.exit_pending=False
         self.catalog=AirportCatalog(args.airports)
@@ -694,6 +695,7 @@ class Display:
             self.ownship_details(fix,own,now) if self.selected=='__ownship__' else self.details(infos.get(self.selected))
         if self.airport_selected:
             self.airport_details()
+        if self.target_choices:self.draw_target_choices()
         attribution=''
         if not self.airport_selected and self.ground and ground_allowed and self.ground_level:
             attribution='Natural Earth' if self.ground_global and self.ground_path.suffix=='.sqlite' else 'Map data © OpenStreetMap contributors'
@@ -900,8 +902,8 @@ class Display:
             self.splash_until=0;self.last_touch=now;self.draw();return
         x=(event.x-self.cx)/self.unit+400;y=(event.y-self.cy)/self.unit+400
         # Visible controls and popup actions never wait for a second tap.
-        popup=bool(self.selected or self.airport_selected)
-        immediate=(self.exit_pending or
+        popup=bool(self.selected or self.airport_selected or self.target_choices)
+        immediate=(self.exit_pending or self.target_choices or
             (self.selected and 322<=x<=478 and 571<=y<=602) or
             (self.airport_selected and any(x1<=x<=x2 and y1<=y<=y2
                 for x1,y1,x2,y2,_ in self.airport_buttons)) or
@@ -914,7 +916,7 @@ class Display:
         if pending:
             self.root.after_cancel(pending[0]);self.pending_tap=None
             if now-pending[1]<=.3 and math.hypot(event.x-pending[2].x,event.y-pending[2].y)<=32*self.unit:
-                self.last_touch=now;self.selected=None;self.airport_selected=None
+                self.last_touch=now;self.selected=None;self.airport_selected=None;self.target_choices=[]
                 self.draw();return
         # Capture hit positions now: moving targets may shift during the delay.
         hits=tuple(self.hits);airports=tuple(self.airport_hits)
@@ -936,6 +938,15 @@ class Display:
                 self.exit_pending=False
                 self.draw()
             return
+        if self.target_choices:
+            for x1,y1,x2,y2,action in self.choice_buttons:
+                if x1<=x<=x2 and y1<=y<=y2:
+                    if action=='cancel':self.target_choices=[]
+                    elif action=='prev':self.choice_page-=1
+                    elif action=='next':self.choice_page+=1
+                    else:self.select_target(self.target_choices[action]);return
+                    self.draw();return
+            return
         if self.airport_selected:
             for x1,y1,x2,y2,action in self.airport_buttons:
                 if x1<=x<=x2 and y1<=y<=y2:
@@ -951,14 +962,53 @@ class Display:
                 action();return
         hits=self.hits if hits is None else hits
         airport_hits=self.airport_hits if airport_hits is None else airport_hits
-        if hits:
-            hx,hy,tail=min(hits,key=lambda item:math.hypot(event.x-item[0],event.y-item[1]))
-            if math.hypot(event.x-hx,event.y-hy)<=28*self.unit:
-                self.selected=tail;self.draw();return
-        if airport_hits:
-            hx,hy,ident=min(airport_hits,key=lambda item:math.hypot(event.x-item[0],event.y-item[1]))
-            if math.hypot(event.x-hx,event.y-hy)<=28*self.unit:
-                self.airport_selected=ident;self.airport_runway_index=None;self.airport_page=0;self.airport_runways=False;self.draw()
+        candidates=[]
+        for kind,items in [('aircraft',hits),('airport',airport_hits)]:
+            for hx,hy,ident in items:
+                distance=math.hypot(event.x-hx,event.y-hy)
+                if distance<=28*self.unit:candidates.append((distance,kind,ident))
+        candidates.sort(key=lambda item:item[0])
+        if len(candidates)>1:
+            self.target_choices=candidates;self.choice_page=0;self.draw()
+        elif candidates:self.select_target(candidates[0])
+
+    def select_target(self,target):
+        _,kind,ident=target
+        self.target_choices=[]
+        if kind=='aircraft':self.selected=ident
+        else:self.airport_selected=ident;self.airport_runway_index=None;self.airport_page=0;self.airport_runways=False
+        self.draw()
+
+    def draw_target_choices(self):
+        # Four large rows per page keep every choice inside the round display.
+        self.rect(185,180,615,625,fill='#071710',outline=WHITE,width=2)
+        self.text(400,209,'Which one?',size=22)
+        self.text(400,239,'Several objects are near your tap',fill=MUTED,size=11)
+        pages=(len(self.target_choices)+3)//4
+        self.choice_page=max(0,min(self.choice_page,pages-1));self.choice_buttons=[]
+        for row,index in enumerate(range(self.choice_page*4,min(len(self.target_choices),self.choice_page*4+4))):
+            _,kind,ident=self.target_choices[index]
+            top=260+row*68
+            if kind=='airport':
+                airport=self.catalog.airports.get(ident,{})
+                title=airport.get('local_code') or ident
+                detail='Airport · '+airport.get('name',ident)
+            elif ident=='__ownship__':title='Ownship';detail='Your aircraft'
+            else:
+                title=(self.snapshot.labels or {}).get(ident,ident)
+                history=self.snapshot.reports.get(ident,[])
+                p=history[-1] if history else None
+                detail='Aircraft'+(f' · {p.altitude:,.0f} ft · {p.speed:.0f} kt' if p and p.altitude is not None else '')
+            self.rect(210,top,590,top+58,fill='#183b2d',outline=GREEN)
+            self.text(400,top+17,title[:32],size=14)
+            self.text(400,top+41,detail[:46],fill=MUTED,size=10)
+            self.choice_buttons.append((210,top,590,top+58,index))
+        for left,right,label,action in [(215,315,'Prev','prev'),(325,475,'Cancel','cancel'),(485,585,'Next','next')]:
+            enabled=action=='cancel' or (action=='prev' and self.choice_page>0) or (action=='next' and self.choice_page+1<pages)
+            self.rect(left,545,right,590,fill='#183b2d',outline=GREEN if enabled else MUTED)
+            self.text((left+right)/2,568,label,fill=WHITE if enabled else MUTED,size=12)
+            if enabled:self.choice_buttons.append((left,545,right,590,action))
+        self.text(400,610,f'Page {self.choice_page+1} of {pages}',fill=MUTED,size=10)
 
 
 def main():

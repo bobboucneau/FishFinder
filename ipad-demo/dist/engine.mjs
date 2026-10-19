@@ -1,4 +1,4 @@
-export const VERSION='0.1.1';
+export const VERSION='0.1.2';
 export const DEFAULTS={range:20,orientation:'track-up',projection:2,trail:60,idle:10,vertical:5000,hideVertical:false,grayVertical:true,airports:true,map:1,ownship:true,symbol:'high-wing'};
 export function validateSettings(input){const s={...DEFAULTS};for(const [k,allowed] of Object.entries({range:[2,5,10,20],projection:[1,2,3,5],trail:[30,60,120,300],idle:[0,10,20,30],vertical:[2000,3000,5000,10000],map:[0,1,2]}))if(allowed.includes(Number(input?.[k])))s[k]=Number(input[k]);for(const k of ['hideVertical','grayVertical','airports','ownship'])if(typeof input?.[k]==='boolean')s[k]=input[k];if(['track-up','north-up'].includes(input?.orientation))s.orientation=input.orientation;if(['high-wing','low-wing','twin'].includes(input?.symbol))s.symbol=input.symbol;return s;}
 export function sample(f,t){const p=f.points;if(t<p[0][0]||t>p.at(-1)[0])return null;let lo=0,hi=p.length-1;while(hi-lo>1){const m=(lo+hi)>>1;if(p[m][0]>t)hi=m;else lo=m;}const a=p[lo],b=p[hi],k=b[0]===a[0]?0:(t-a[0])/(b[0]-a[0]);return a.slice(1).map((v,i)=>v+(b[i+1]-v)*k);}
@@ -10,3 +10,6 @@ export function assess(p,o,s){if(!s.ownship)return {color:'#66ee9a',reason:'No o
 export function course(p){return (Math.atan2(p.ve,p.vn)*180/Math.PI+360)%360;}
 export function screenPoint(e,n,origin,heading,range){const a=heading*Math.PI/180,dx=e-origin.e,dy=n-origin.n,k=382/range;return [400+(dx*Math.cos(a)-dy*Math.sin(a))*k,400-(dx*Math.sin(a)+dy*Math.cos(a))*k];}
 export function arrowPoints(point,h,direction){const side=[-h[1],h[0]].map(v=>v*(direction==='Right'?1:-1)),r=16,c=[point[0]-h[0]*26+side[0]*r,point[1]-h[1]*26+side[1]*r],p=[[point[0]+side[0]*32+h[0]*8,point[1]+side[1]*32+h[1]*8]];for(let i=0;i<=24;i++){const t=i*Math.PI/24;p.push([c[0]+r*(side[0]*Math.cos(t)-h[0]*Math.sin(t)),c[1]+r*(side[1]*Math.cos(t)-h[1]*Math.sin(t))]);}p.push([point[0]-h[0]*7,point[1]-h[1]*7]);return p;}
+
+// Keep a tapped cluster stable while its targets continue moving.
+export function nearbyTargets(hits,x,y,radius=28){return hits.map((hit,i)=>({...hit,distance:Math.hypot(hit.x-x,hit.y-y),order:i})).filter(hit=>hit.distance<=radius).sort((a,b)=>a.distance-b.distance||a.order-b.order);}
