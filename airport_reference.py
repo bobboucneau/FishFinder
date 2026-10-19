@@ -88,11 +88,11 @@ def draw(d,a):
         elif tower=='non-towered':
             label=' · '.join(f"{runway.get(k,'?')} {pattern(a,runway.get(k)) or 'pattern unavailable'}" for k in ('le_ident','he_ident'))
         else:label='Pattern direction unavailable'
-        d.text(400,264,label,size=16,width=600*d.unit)
+        d.text(400,282,label,size=16,width=600*d.unit)
         altitude,provenance=pattern_altitude(a,runway)
         standard=provenance.startswith('Standard')
-        d.text(400,298,(f'Pattern {altitude:,.0f} ft MSL'+(' *' if standard else '')) if altitude is not None else 'Pattern altitude unavailable',size=18,fill='#ffd45c' if standard else '#e0f2ef')
-        if provenance:d.text(400,323,'* Field + 1,000 ft; verify local procedures' if standard else provenance,size=10,fill='#ffd45c' if standard else '#9fb8c6')
+        d.text(400,316,(f'Pattern {altitude:,.0f} ft MSL'+(' *' if standard else '')) if altitude is not None else 'Pattern altitude unavailable',size=18,fill='#ffd45c' if standard else '#e0f2ef')
+        if provenance:d.text(400,341,'* Field + 1,000 ft; verify local procedures' if standard else provenance,size=10,fill='#ffd45c' if standard else '#9fb8c6')
         diagram(d,a,runway)
         if len(runways(a))>1:
             for i,r in enumerate(runways(a)):
@@ -149,7 +149,14 @@ def diagram(d,a,selected):
     def line(points,**kw):
         coords=[n for x,y in points for n in (d.cx+(x-400)*d.unit,d.cy+(y-400)*d.unit)]
         d.canvas.create_line(*coords,**kw)
-    d.text(586,350,'NORTH UP',size=10,fill='#9fb8c6')
+    d.text(586,365,'N',size=13,fill='#dceeee')
+    line([(572,398),(600,398)],fill='#9fb8c6',width=d.unit)
+    line([(586,376),(586,420)],fill='#9fb8c6',width=d.unit)
+    def triangle(points,color):
+        coords=[n for x,y in points for n in (d.cx+(x-400)*d.unit,d.cy+(y-400)*d.unit)]
+        d.canvas.create_polygon(*coords,fill=color,outline=color,tags='airport-compass')
+    triangle([(586,376),(578,408),(586,402)],'#dceeee')
+    triangle([(586,376),(594,408),(586,402)],'#658b9e')
     label_positions=[]
     screen_segments=[(screen(p),screen(q)) for _,p,q,_ in segments]
     def distance(point,a,b):

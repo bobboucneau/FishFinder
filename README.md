@@ -1,3 +1,5 @@
+v0.4.21 spaces airport pattern text below weather radio data, replaces the diagram north label with a compass arrow, adds © 2026 FishFinder separately from map attribution, and uses stable fictional NX registrations in collector demo mode. Mac checks passed; Pi hardware validation is pending.
+
 v0.4.20 adds a touch target chooser for overlapping aircraft and airports, with four large choices per page, Prev/Next, and Cancel. Isolated targets open directly. Mac automated checks passed; physical Pi testing is pending.
 
 v0.4.19 adds single-tap ownship details: altitude, groundspeed, true ground course, position age and source. A stale ownship fix is explicitly unavailable. Mac display tests passed; physical Pi validation is pending.

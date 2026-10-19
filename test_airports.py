@@ -145,7 +145,8 @@ class Tests(unittest.TestCase):
         d=gui(True);self.assertIsNone(d.airport_track)
         d.airport_selected='KCPU';d.airport_runways=False;d.draw()
         labels=[k.get('text','') for _,_,k in d.canvas.commands]
-        self.assertTrue(any('NORTH UP' in t for t in labels))
+        self.assertIn('N',labels)
+        self.assertTrue(any(kw.get('tags')=='airport-compass' for _,_,kw in d.canvas.commands))
         d=gui(path='not-there.json');self.assertTrue(d.catalog.error);self.assertTrue(d.hits)
         # Fresh fix at zero speed falls back north up rather than inventing heading.
         d=gui();now=time.time()

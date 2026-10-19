@@ -387,20 +387,22 @@ class Display:
         return self.canvas.create_text(self.cx+(x-400)*self.unit,self.cy+(y-400)*self.unit,
             text=text,fill=fill,font=('DejaVu Sans',max(9,int(size*self.unit))),**kwargs)
 
-    def rim_attribution(self,text):
+    def rim_attribution(self,text,center_angle=math.pi/4):
         """Readable text along the inside of the lower-right circular rim."""
         font=('DejaVu Sans',max(10,int(10*self.unit)))
         key=(text,font)
-        if getattr(self,'rim_key',None)!=key:
+        if not hasattr(self,'rim_cache'):self.rim_cache={}
+        if key not in self.rim_cache:
             if isinstance(self.root,tk.Misc):
                 import tkinter.font as tkfont
                 measured=tkfont.Font(root=self.root,font=font)
                 widths=[measured.measure(char) for char in text]
             else:widths=[font[1]*(.35 if char==' ' else .6) for char in text]
-            self.rim_key=key;self.rim_widths=widths
-        radius=390*self.unit;progress=-sum(self.rim_widths)/2
-        for char,width in zip(text,self.rim_widths):
-            phi=math.pi/4-(progress+width/2)/radius
+            self.rim_cache[key]=widths
+        widths=self.rim_cache[key]
+        radius=390*self.unit;progress=-sum(widths)/2
+        for char,width in zip(text,widths):
+            phi=center_angle-(progress+width/2)/radius
             if not char.isspace():
                 self.canvas.create_text(self.cx+radius*math.cos(phi),self.cy+radius*math.sin(phi),
                     text=char,fill=MUTED,font=font,angle=90-math.degrees(phi),tags='map-attribution')
@@ -700,6 +702,7 @@ class Display:
         if not self.airport_selected and self.ground and ground_allowed and self.ground_level:
             attribution='Natural Earth' if self.ground_global and self.ground_path.suffix=='.sqlite' else 'Map data © OpenStreetMap contributors'
         self.rim_attribution('v'+self.version+(' · '+attribution if attribution else ''))
+        if not self.airport_selected:self.rim_attribution('© 2026 FishFinder',3*math.pi/4)
         if self.touch_debug and self.touch_mark and time.monotonic()-self.touch_mark[2]<3:
             tx,ty,_=self.touch_mark
             c.create_oval(tx-5,ty-5,tx+5,ty+5,outline='#ff88ff',width=2)

@@ -13,6 +13,16 @@ from test_airports import Canvas,gui
 
 
 class DemoTests(unittest.TestCase):
+    def test_fictional_registrations_stable_unique_and_no_io(self):
+        scene=Scenario();seen={}
+        for t in range(0,3601,30):
+            for message in scene.messages(t)[0]:
+                tail=message['Tail'];address=message['Icao_addr']
+                self.assertRegex(tail,r'^NX[1-9][0-9]{2}[A-HJ-NP-Z]$')
+                if address in seen:self.assertEqual(seen[address],tail)
+                seen[address]=tail
+        self.assertEqual(len(seen.values()),len(set(seen.values())))
+
     def test_airport_patterns_and_two_circuits(self):
         scene=Scenario()
         for points,elevation in zip(scene.patterns,[2100,2933,1325,234]):
@@ -34,7 +44,7 @@ class DemoTests(unittest.TestCase):
         for t in range(3601):
             scene.advance(t);active=[(f,f.sample(t)) for f in scene.flights if f.sample(t) is not None]
             kinds.update(f.kind for f,p in active)
-            both|=sum(f.kind=='C172' and 'O22' in f.tail for f,p in active)==2
+            both|=sum(f.kind=='C172' and f.address in (0xD00000,0xD00001) for f,p in active)==2
             samples=[p for f,p in active]+[scene.ownship(t)]
             for a,b in itertools.combinations(samples,2):
                 self.assertTrue(abs(a[2]-b[2])>=400 or math.hypot(a[0]-b[0],a[1]-b[1])>=.35)

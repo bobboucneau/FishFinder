@@ -11,6 +11,13 @@ AIRPORTS = [('O22','17',2100,2,330), ('E45','27',2933,1,600),
             ('KCPU','31',1325,2,350), ('O27','28',234,1,600)]
 
 
+def demo_registration(address):
+    """Fictional display labels, stable for each synthetic ICAO address."""
+    letters='ABCDEFGHJKLMNPQRSTUVWXYZ'
+    number,letter=divmod((address-0xD00000)%21600,len(letters))
+    return f'NX{100+number:03d}{letters[letter]}'
+
+
 def geographic(origin, east, north):
     radius=3440.065
     distance=math.hypot(east,north)/radius
@@ -142,10 +149,10 @@ class Scenario:
     def transit(self,start,kind):
         self.serial+=1;angle=self.random.uniform(0,2*math.pi)
         finish=angle+math.pi+self.random.uniform(-.7,.7)
-        if kind=='airliner':alt=self.random.uniform(28000,32000);speed=self.random.uniform(480,510);prefix='JET'
-        else:alt=self.random.uniform(4500,12000);speed=self.random.triangular(120,400,120);prefix='GA'
+        if kind=='airliner':alt=self.random.uniform(28000,32000);speed=self.random.uniform(480,510)
+        else:alt=self.random.uniform(4500,12000);speed=self.random.triangular(120,400,120)
         points=[(32*math.cos(a),32*math.sin(a),alt,speed) for a in (angle,finish)]
-        return route(0xD10000+self.serial,f'{prefix}{self.serial:04d}',kind,start,points)
+        return route(0xD10000+self.serial,demo_registration(0xD10000+self.serial),kind,start,points)
 
     def helicopter(self,start):
         self.serial+=1;o22=self.airports['O22'];e45=self.airports['E45']
@@ -156,7 +163,7 @@ class Scenario:
         a,b=endpoints;dist=math.hypot(b[0]-a[0],b[1]-a[1]);fraction=min(.15,1/dist)
         middle=lambda f:(a[0]+(b[0]-a[0])*f,a[1]+(b[1]-a[1])*f,3500,80)
         points=[(*a,2100 if a==col else 3500,80),middle(fraction),middle(1-fraction),(*b,2100 if b==col else 2933 if b==pine else 3500,80)]
-        return route(0xD20000+self.serial,f'HELI{self.serial:03d}','helicopter',start,points)
+        return route(0xD20000+self.serial,demo_registration(0xD20000+self.serial),'helicopter',start,points)
 
     def advance(self,now):
         # Generate chronologically, independent of the caller's polling frequency.
@@ -170,7 +177,7 @@ class Scenario:
                 n=self.departure_counts[index];slot=n%count
                 points=self.patterns[index]
                 # Two circuits per sortie, including a touch-and-go.
-                f=rounded_route(0xD00000+index*10+slot,f'DEMO-{code}-{slot+1}','C172',start,points+points[1:])
+                f=rounded_route(0xD00000+index*10+slot,demo_registration(0xD00000+index*10+slot),'C172',start,points+points[1:])
                 self.admit(f);self.departure_counts[index]+=1
                 self.next_departures[index]+=interval
             elif index==4:

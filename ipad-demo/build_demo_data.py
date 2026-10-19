@@ -33,7 +33,7 @@ for a in s.airports.values():
  segments=[]
  for r,p,q,schematic in runway_segments(dict(a,runways=strips),xy):segments.append(dict(le=r['le_ident'],he=r['he_ident'],p=p,q=q,schematic=schematic))
  airports.append(dict(code=a['code'],name=a['name'],e=e,n=n,elevation=float(a['elevation_ft']),frequencies=a.get('frequencies',[]),runways=refs,segments=segments,simple=simple_airport(a),source=a.get('reference',{}),defaultRunway=max(range(len(strips)),key=lambda i:float(strips[i].get('length_ft') or 0))))
-(out/'demo.json').write_text(json.dumps(dict(version='0.1.0',basedOn='0.4.18',origin=s.origin,start=600,end=1800,flights=result,airports=airports),separators=(',',':')))
+(out/'demo.json').write_text(json.dumps(dict(version='0.1.3',basedOn='0.4.21',origin=s.origin,start=600,end=1800,flights=result,airports=airports),separators=(',',':')))
 ground=json.loads((ROOT/'demo_ground.json').read_text())
 # Optional build-only source for settlement labels; never copy the world archive.
 if '--world-map' in sys.argv:

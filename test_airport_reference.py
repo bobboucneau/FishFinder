@@ -78,7 +78,7 @@ class Tests(unittest.TestCase):
         self.assertTrue(any(kw.get('tags')=='map-attribution' for _,_,kw in obj.canvas.commands))
         obj.airport_selected=None;obj.ground_level=0;obj.last_touch=0;obj.draw()
         chars=''.join(kw.get('text','') for _,_,kw in obj.canvas.commands if kw.get('tags')=='map-attribution')
-        self.assertEqual(chars,'v'+obj.version)
+        self.assertEqual(chars,'v'+obj.version+'©2026FishFinder')
         obj.stop.set()
 
     def test_standard_and_runway_specific_altitude(self):
