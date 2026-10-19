@@ -7,6 +7,16 @@ from pathlib import Path
 BLUE = '#62b6ff'
 
 
+def airport_color(a):
+    """Published tower status, not a claim that a part-time tower is open now."""
+    status=a.get('reference',{}).get('tower')
+    if status=='towered':return '#48baff'
+    if status=='non-towered':return '#f075d5'
+    kinds={f.get('type','').upper() for f in a.get('frequencies',[])}
+    if 'TWR' in kinds:return '#48baff'
+    return '#9aafaa'  # Unknown status stays neutral.
+
+
 def number(value):
     try:
         n = float(value)

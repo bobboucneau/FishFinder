@@ -137,7 +137,7 @@ class Tests(unittest.TestCase):
         ranges=[coords[0] for _,coords,kw in display.canvas.commands if str(kw.get('text','')).endswith(' NM')]
         self.assertEqual(len(ranges),4);self.assertEqual(len(set(ranges)),1)
         self.assertNotIn('Setup',labels);self.assertNotIn('Exit',labels)
-        airport_labels=[kw['text'] for _,_,kw in display.canvas.commands if kw.get('tags')=='map-label' and kw.get('fill')==d.BLUE]
+        airport_labels=[kw['text'] for _,_,kw in display.canvas.commands if kw.get('tags')=='map-label' and kw.get('fill') in ('#f075d5','#48baff','#9aafaa')]
         self.assertTrue(airport_labels)
         self.assertTrue(all(' · ' not in label for label in airport_labels))
         self.assertTrue(display.hits)

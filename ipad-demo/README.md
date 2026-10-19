@@ -1,3 +1,5 @@
+Web v0.1.4 enlarges airport symbols 40% and uses magenta for non-towered airports, bright blue for towered airports, and neutral gray for unknown status. All four local demo airports are non-towered.
+
 Web v0.1.3 adds airport pattern spacing, a north compass arrow, separate © 2026 FishFinder attribution, and stable fictional NX registrations (three digits, one letter, no I or O). These are synthetic identifiers, not verified real registrations.
 
 Web v0.1.2 adds a nearby-target chooser when a single tap is within reach of more than one aircraft or airport. Entries show aircraft altitude/speed, preserve their order, and support scrolling. Isolated targets still open directly; double-tap still reveals controls.

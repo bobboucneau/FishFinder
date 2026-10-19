@@ -81,6 +81,16 @@ class Tests(unittest.TestCase):
         d.single_tap(SimpleNamespace(x=400,y=400),[(400,400,'test0')],[])
         self.assertEqual(d.selected,'test0')
 
+    def test_main_airport_tower_colors(self):
+        self.assertEqual(ad.airport_color({'reference':{'tower':'non-towered'}}),'#f075d5')
+        self.assertEqual(ad.airport_color({'reference':{'tower':'towered'}}),'#48baff')
+        self.assertEqual(ad.airport_color({'frequencies':[{'type':'TWR'}]}),'#48baff')
+        self.assertEqual(ad.airport_color({}),'#9aafaa')
+        d=gui()
+        symbols=[(coords,kw) for name,coords,kw in d.canvas.commands if name=='create_rectangle' and kw.get('outline') in ('#f075d5','#48baff','#9aafaa')]
+        self.assertTrue(symbols)
+        self.assertTrue(any(abs(coords[2]-coords[0]-14*d.unit)<.01 for coords,_ in symbols))
+
     def test_freshness(self):
         self.assertFalse(ad.freshness_label('2026-10-06',date(2026,10,6))[1])
         self.assertTrue(ad.freshness_label('2026-10-06',date(2026,11,7))[1])

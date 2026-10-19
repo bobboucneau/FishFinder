@@ -1,3 +1,5 @@
+v0.4.22 enlarges main-display airport symbols from 10 to 14 logical pixels and colors symbols and labels magenta for published non-towered airports, bright blue for towered airports, and neutral gray when status is unknown. Tower classification does not indicate current operating hours. Mac checks passed; Pi testing is pending.
+
 v0.4.21 spaces airport pattern text below weather radio data, replaces the diagram north label with a compass arrow, adds © 2026 FishFinder separately from map attribution, and uses stable fictional NX registrations in collector demo mode. Mac checks passed; Pi hardware validation is pending.
 
 v0.4.20 adds a touch target chooser for overlapping aircraft and airports, with four large choices per page, Prev/Next, and Cancel. Isolated targets open directly. Mac automated checks passed; physical Pi testing is pending.

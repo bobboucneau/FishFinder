@@ -19,7 +19,7 @@ import time
 import tkinter as tk
 from dataclasses import dataclass
 from pathlib import Path
-from airport_data import AirportCatalog, BLUE, rotate, runway_segments, freshness_label
+from airport_data import AirportCatalog, BLUE, rotate, runway_segments, freshness_label, airport_color
 
 EARTH_NM = 3440.065
 HORIZON = 300.0
@@ -535,8 +535,8 @@ class Display:
                 pos=rotate(xy(airport['lat'],airport['lon'],origin),self.map_heading)
                 if math.hypot(*pos)>self.radius_nm: continue
                 x,y=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels
-                sz=5*self.unit
-                c.create_rectangle(x-sz,y-sz,x+sz,y+sz,outline=BLUE,fill='#10253d',width=2)
+                sz=7*self.unit
+                c.create_rectangle(x-sz,y-sz,x+sz,y+sz,outline=airport_color(airport),fill='#10253d',width=2)
                 self.airport_hits.append((x,y,airport['ident']))
             # Labels nearest first, with collision avoidance and circular clipping.
             boxes=[]
@@ -560,7 +560,7 @@ class Display:
                 corners=[(box[a],box[b]) for a in (0,2) for b in (1,3)]
                 if any(math.hypot(px-self.cx,py-self.cy)>radius-5*self.unit for px,py in corners): continue
                 if any(box[0]<b[2] and box[2]>b[0] and box[1]<b[3] and box[3]>b[1] for b in boxes): continue
-                c.create_text(left,top,text=label,anchor='nw',fill=BLUE,font=('DejaVu Sans',max(9,int(9*self.unit))),tags='map-label')
+                c.create_text(left,top,text=label,anchor='nw',fill=airport_color(airport),font=('DejaVu Sans',max(9,int(9*self.unit))),tags='map-label')
                 boxes.append(box)
         if origin:
             if fix:
