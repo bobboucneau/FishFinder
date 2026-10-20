@@ -526,7 +526,7 @@ class Display:
         self.airport_track=None if ov is None or math.hypot(*ov)<1e-10 or not fix or fix.speed<5 else math.degrees(math.atan2(ov[0],ov[1]))%360
         self.airport_hits=[]
         if origin and self.airports_visible:
-            extension_margin=3.2 if self.config['runway_extensions'] and self.radius_nm<=5 else .2
+            extension_margin=3.2 if self.config['runway_extensions'] else .2
             key=(round(origin[0],3),round(origin[1],3),self.radius_nm,extension_margin)
             query_now=time.monotonic()
             if key != self.airport_query or query_now-self.airport_query_time>=AIRPORT_REFRESH_SECONDS:
@@ -535,7 +535,7 @@ class Display:
                 self.airport_query=key;self.airport_query_time=query_now
             for _,airport,_ in self.near_airports:
                 pos=rotate(xy(airport['lat'],airport['lon'],origin),self.map_heading)
-                if self.config['runway_extensions'] and self.radius_nm<=5:
+                if self.config['runway_extensions']:
                     offset=xy(airport['lat'],airport['lon'],origin)
                     for runway,a,b,schematic in runway_segments(airport,xy):
                         if schematic or runway.get('closed')=='1':continue

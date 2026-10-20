@@ -40,8 +40,9 @@ class Tests(unittest.TestCase):
                 return [coords for name,coords,kw in obj.canvas.commands if kw.get('tags')=='runway-extension']
             self.assertEqual(len(redraw(5)),2)
             for coords in redraw(5):self.assertAlmostEqual(math.dist(coords[:2],coords[2:])/obj.pixels,3,places=4)
-            self.assertFalse(redraw(10))
-            obj.config['runway_extensions']=False;self.assertFalse(redraw(5))
+            for radius in (2,5,10,20):self.assertEqual(len(redraw(radius)),2)
+            obj.config['runway_extensions']=False
+            for radius in (2,5,10,20):self.assertFalse(redraw(radius))
             obj.config['runway_extensions']=True;airport['runways']=[dict(length_ft=3000,le_heading_degT=90)]
             self.assertFalse(redraw(5))  # A schematic is not a located centerline.
         obj.stop.set()

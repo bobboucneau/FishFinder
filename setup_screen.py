@@ -51,7 +51,7 @@ class Setup:
                 widget.bind('<Button-1>',lambda event,w=widget:self.show_keyboard(w))
             widget.grid(row=row,column=1,padx=7,pady=2)
         if index==0:
-            for key,label in [('vertical_filter','Gray vertically distant aircraft'),('hide_vertical','Hide vertically distant aircraft'),('airports_visible','Show airports'),('ground_map','Show ground map (experiment)'),('runway_extensions','Runway extensions (5 NM and closer)')]:
+            for key,label in [('vertical_filter','Gray vertically distant aircraft'),('hide_vertical','Hide vertically distant aircraft'),('airports_visible','Show airports'),('ground_map','Show ground map (experiment)'),('runway_extensions','Runway extensions (all ranges)')]:
                 tk.Checkbutton(self.page,text=label,variable=self.vars[key],bg=BG,fg=FG,selectcolor=BG,
                                activebackground=BG,borderwidth=0,highlightthickness=0,relief='flat').pack(anchor='w',padx=12)
         else:

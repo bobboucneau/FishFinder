@@ -1,1 +1,1 @@
-{"name":"fishfinder-ipad-demo","private":true,"version":"0.1.5","type":"module","scripts":{"test":"node --test test-engine.mjs"}}
+{"name":"fishfinder-ipad-demo","private":true,"version":"0.1.6","type":"module","scripts":{"test":"node --test test-engine.mjs"}}
