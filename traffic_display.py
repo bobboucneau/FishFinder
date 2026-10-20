@@ -475,7 +475,8 @@ class Display:
         w,h=c.winfo_width(),c.winfo_height()
         self.unit=max(0.1,min(w,h)/800); self.cx=w/2;self.cy=h/2
         radius=398*self.unit;self.pixels=radius/self.radius_nm
-        self.hits=[]; self.buttons=[];now=time.time()
+        self.hits=[]; self.buttons=[];self.label_boxes=[];now=time.time()
+        self.label_factor=settings.label_scale(self.config,self.radius_nm)
         self.idle=bool(self.config['idle_seconds'] and time.monotonic()-self.last_touch>=self.config['idle_seconds'] and
                        not (self.exit_pending or self.setup_panel))
         snap=self.snapshot
@@ -525,43 +526,55 @@ class Display:
         self.airport_track=None if ov is None or math.hypot(*ov)<1e-10 or not fix or fix.speed<5 else math.degrees(math.atan2(ov[0],ov[1]))%360
         self.airport_hits=[]
         if origin and self.airports_visible:
-            key=(round(origin[0],3),round(origin[1],3),self.radius_nm)
+            extension_margin=3.2 if self.config['runway_extensions'] and self.radius_nm<=5 else .2
+            key=(round(origin[0],3),round(origin[1],3),self.radius_nm,extension_margin)
             query_now=time.monotonic()
             if key != self.airport_query or query_now-self.airport_query_time>=AIRPORT_REFRESH_SECONDS:
                 # Slightly wider cache envelope; final clipping uses exact current origin.
-                self.near_airports=self.catalog.nearby(origin,self.radius_nm+0.2,xy)
+                self.near_airports=self.catalog.nearby(origin,self.radius_nm+extension_margin,xy)
                 self.airport_query=key;self.airport_query_time=query_now
             for _,airport,_ in self.near_airports:
                 pos=rotate(xy(airport['lat'],airport['lon'],origin),self.map_heading)
-                if math.hypot(*pos)>self.radius_nm: continue
-                x,y=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels
-                sz=7*self.unit
-                c.create_rectangle(x-sz,y-sz,x+sz,y+sz,outline=airport_color(airport),fill='#10253d',width=2)
+                if self.config['runway_extensions'] and self.radius_nm<=5:
+                    offset=xy(airport['lat'],airport['lon'],origin)
+                    for runway,a,b,schematic in runway_segments(airport,xy):
+                        if schematic or runway.get('closed')=='1':continue
+                        length=math.dist(a,b)
+                        if length<1e-5:continue
+                        v=((b[0]-a[0])/length,(b[1]-a[1])/length)
+                        aa=(offset[0]+a[0],offset[1]+a[1]);bb=(offset[0]+b[0],offset[1]+b[1])
+                        self.line((aa[0]-3*v[0],aa[1]-3*v[1]),aa,'#687578',width=1,dash=(4,5),tags='runway-extension')
+                        self.line(bb,(bb[0]+3*v[0],bb[1]+3*v[1]),'#687578',width=1,dash=(4,5),tags='runway-extension')
+                        self.line(aa,bb,airport_color(airport),width=3*self.unit,tags='runway-strip')
+                if math.hypot(*pos)>self.radius_nm:continue
+                x,y=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels;sz=7*self.unit
+                c.create_rectangle(x-sz,y-sz,x+sz,y+sz,outline=airport_color(airport),fill=airport_color(airport),width=2)
                 self.airport_hits.append((x,y,airport['ident']))
             # Labels nearest first, with collision avoidance and circular clipping.
-            boxes=[]
+            boxes=[(self.cx-20*self.unit,self.cy-20*self.unit,self.cx+20*self.unit,self.cy+20*self.unit)] if fix else []
             # Reserve the existing traffic symbol and label areas before airport labels.
             for tail,history in histories.items():
                 pos=rotate(xy(history[-1].lat,history[-1].lon,origin),self.map_heading)
                 if math.hypot(*pos)>self.radius_nm: continue
                 tx,ty=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels
                 text=(snap.labels or {}).get(tail,tail)+(' · OLD' if now-history[-1].time>10 else '')
-                tw=len(text)*7*self.unit
+                tw=len(text)*7*self.unit*self.label_factor
                 left=tx-12*self.unit-tw if pos[0]>=0 else tx+12*self.unit
-                boxes.extend([(left,ty-20*self.unit,left+tw,ty),(tx-10*self.unit,ty-10*self.unit,tx+10*self.unit,ty+10*self.unit)])
+                boxes.extend([(left,ty-20*self.unit*self.label_factor,left+tw,ty),(tx-10*self.unit,ty-10*self.unit,tx+10*self.unit,ty+10*self.unit)])
             for x,y,ident in self.airport_hits:
                 airport=self.catalog.airports[ident]
                 label=airport['code'] if self.idle else airport['code']+' · '+airport['name'][:18]
                 if not self.idle and len(airport['name'])>18: label+='…'
-                width=len(label)*5.3*self.unit
+                width=len(label)*6.5*self.unit*self.label_factor
                 side=-1 if x>=self.cx else 1
                 left=x-10*self.unit-width if side<0 else x+10*self.unit
-                top=y+7*self.unit; box=(left,top,left+width,top+13*self.unit)
+                top=y+7*self.unit; box=(left,top,left+width,top+16*self.unit*self.label_factor)
                 corners=[(box[a],box[b]) for a in (0,2) for b in (1,3)]
                 if any(math.hypot(px-self.cx,py-self.cy)>radius-5*self.unit for px,py in corners): continue
                 if any(box[0]<b[2] and box[2]>b[0] and box[1]<b[3] and box[3]>b[1] for b in boxes): continue
-                c.create_text(left,top,text=label,anchor='nw',fill=airport_color(airport),font=('DejaVu Sans',max(9,int(9*self.unit))),tags='map-label')
+                c.create_text(left,top,text=label,anchor='nw',fill=airport_color(airport),font=('DejaVu Sans',max(9,int(11*self.unit*self.label_factor))),tags='map-label')
                 boxes.append(box)
+            self.label_boxes=boxes
         if origin:
             if fix:
                 self.hits.append((self.cx,self.cy,'__ownship__'))
@@ -634,8 +647,9 @@ class Display:
                 # Keep the label inside the scope even near its perimeter.
                 side=-1 if screen_pos[0]>=0 else 1
                 c.create_text(x+side*12*self.unit,y-10*self.unit,text=label,anchor='e' if side<0 else 'w',
-                    fill=color,font=('DejaVu Sans',max(9,int(10*self.unit))),tags='map-label')
+                    fill=color,font=('DejaVu Sans',max(9,int(10*self.unit*self.label_factor))),tags='map-label')
                 self.hits.append((x,y,tail))
+        if origin and ground_allowed and self.ground and self.ground_level:self.draw_town_labels(origin)
         overlay_start=len(c.find_all())
         self.rect(215,50,585,131,fill=BG,outline='')
         self.text(400,68,'FISHFINDER'+(' · DEMO' if snap.demo or (snap.receiver and snap.receiver[2].startswith('DEMO:')) else ''),size=17)
@@ -745,18 +759,31 @@ class Display:
         if self.ground_image is not None and self.ground_image_state[2:]==state[2:] and now-self.ground_image_time<=3:
             # One image item per traffic frame; no map paths or pixel work in Tk.
             self.canvas.create_image(self.cx,self.cy,image=self.ground_image)
-            occupied=[]
-            for lat,lon,name in getattr(self,'ground_labels',()):
-                pos=rotate(xy(lat,lon,self.ground_image_state[0]),self.ground_image_state[1])
-                if math.hypot(*pos)>self.radius_nm*.86:continue
-                x,y=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels+8*self.unit
-                width=min(200,len(name)*5.5)*self.unit
-                box=(x-width/2-4,y-8,x+width/2+4,y+8)
-                if any(math.hypot(box[a]-self.cx,box[b]-self.cy)>self.radius_nm*self.pixels-5*self.unit for a in (0,2) for b in (1,3)):continue
-                if any(box[0]<b[2] and box[2]>b[0] and box[1]<b[3] and box[3]>b[1] for b in occupied):continue
-                self.canvas.create_text(x,y,text=name,fill='#728082',font=('DejaVu Sans',max(9,int(10*self.unit))))
-                occupied.append(box)
-                if len(occupied)>=12:break
+
+    def draw_town_labels(self,origin):
+        if self.ground_image is None or time.monotonic()-self.ground_image_time>3:return
+        occupied=list(self.label_boxes)
+        # Traffic and airport labels take priority; reserve traffic even if airports are off.
+        for x,y,tail in self.hits:
+            if tail=='__ownship__':
+                occupied.append((x-20*self.unit,y-20*self.unit,x+20*self.unit,y+20*self.unit));continue
+            label=(self.snapshot.labels or {}).get(tail,tail)
+            width=len(label)*7*self.unit*self.label_factor
+            left=x-12*self.unit-width if x>=self.cx else x+12*self.unit
+            occupied.append((left,y-22*self.unit*self.label_factor,left+width,y+5*self.unit))
+        count=0
+        for lat,lon,name in getattr(self,'ground_labels',()):
+            pos=rotate(xy(lat,lon,origin),self.map_heading)
+            if math.hypot(*pos)>self.radius_nm*.86:continue
+            x,y=self.cx+pos[0]*self.pixels,self.cy-pos[1]*self.pixels+8*self.unit
+            width=min(200,len(name)*5.5)*self.unit*self.label_factor
+            height=9*self.unit*self.label_factor
+            box=(x-width/2-4,y-height,x+width/2+4,y+height)
+            if any(math.hypot(box[a]-self.cx,box[b]-self.cy)>self.radius_nm*self.pixels-5*self.unit for a in (0,2) for b in (1,3)):continue
+            if any(box[0]<b[2] and box[2]>b[0] and box[1]<b[3] and box[3]>b[1] for b in occupied):continue
+            self.canvas.create_text(x,y,text=name,fill='#728082',font=('DejaVu Sans',max(9,int(10*self.unit*self.label_factor))),tags='town-label')
+            occupied.append(box);count+=1
+            if count>=12:break
 
     def toggle_airports(self):
         self.airports_visible=not self.airports_visible;self.draw()

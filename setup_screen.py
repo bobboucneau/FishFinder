@@ -36,12 +36,12 @@ class Setup:
         if self.busy:self.status.set('Wait for the airport update before switching pages.');return
         self.hide_keyboard();self.refresh_button=None
         for child in self.page.winfo_children():child.destroy()
-        fields=([('default_range','Range (NM)'),('orientation','Map orientation'),('ownship_symbol','Ownship airplane'),
+        fields=([('default_range','Range (NM)'),('label_size','Label size'),('orientation','Map orientation'),('ownship_symbol','Ownship airplane'),
                  ('horizon_minutes','Projection (minutes)'),('idle_seconds','Hide controls (seconds)'),('trail_seconds','Trail (seconds)')]
                 if index==0 else [('stratux_ip','Stratux IP'),('own_tail','Your tail number'),
                                   ('ownship_source','Ownship preference'),('vertical_threshold_ft','Altitude limit (feet)')])
         form=tk.Frame(self.page,bg=BG);form.pack()
-        choices={'default_range':('2','5','10','20'),'orientation':('track-up','north-up'),
+        choices={'label_size':('normal','large','extra-large'),'default_range':('2','5','10','20'),'orientation':('track-up','north-up'),
                  'ownship_symbol':('high-wing','low-wing','twin'),'ownship_source':('adsb-first','stratux-first')}
         for row,(key,label) in enumerate(fields):
             tk.Label(form,text=label,bg=BG,fg=FG,font=('DejaVu Sans',10)).grid(row=row,column=0,sticky='w',pady=2)
@@ -51,7 +51,7 @@ class Setup:
                 widget.bind('<Button-1>',lambda event,w=widget:self.show_keyboard(w))
             widget.grid(row=row,column=1,padx=7,pady=2)
         if index==0:
-            for key,label in [('vertical_filter','Gray vertically distant aircraft'),('hide_vertical','Hide vertically distant aircraft'),('airports_visible','Show airports'),('ground_map','Show ground map (experiment)')]:
+            for key,label in [('vertical_filter','Gray vertically distant aircraft'),('hide_vertical','Hide vertically distant aircraft'),('airports_visible','Show airports'),('ground_map','Show ground map (experiment)'),('runway_extensions','Runway extensions (5 NM and closer)')]:
                 tk.Checkbutton(self.page,text=label,variable=self.vars[key],bg=BG,fg=FG,selectcolor=BG,
                                activebackground=BG,borderwidth=0,highlightthickness=0,relief='flat').pack(anchor='w',padx=12)
         else:

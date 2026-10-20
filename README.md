@@ -1,3 +1,5 @@
+v0.4.23 adds Normal/Large/Extra-large label sizes, zoom scaling (20/10/5/2 NM: 1/1.12/1.25/1.4), and optional 3 NM dashed runway centerline extensions at 5 NM and closer. Only actual runway endpoints are extended; schematic and closed runways are excluded. Airport symbols are now filled. Town labels yield to aircraft and airport labels. Settings default to Normal with extensions enabled. Pi hardware validation is pending.
+
 v0.4.22 enlarges main-display airport symbols from 10 to 14 logical pixels and colors symbols and labels magenta for published non-towered airports, bright blue for towered airports, and neutral gray when status is unknown. Tower classification does not indicate current operating hours. Mac checks passed; Pi testing is pending.
 
 v0.4.21 spaces airport pattern text below weather radio data, replaces the diagram north label with a compass arrow, adds © 2026 FishFinder separately from map attribution, and uses stable fictional NX registrations in collector demo mode. Mac checks passed; Pi hardware validation is pending.

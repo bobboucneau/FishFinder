@@ -23,6 +23,29 @@ except ModuleNotFoundError as exc:
 
 
 class Tests(unittest.TestCase):
+    def test_label_settings_zoom_and_runway_extensions(self):
+        self.assertEqual(settings.validate({})['label_size'],'normal')
+        self.assertTrue(settings.validate({})['runway_extensions'])
+        with self.assertRaises(ValueError):settings.validate({'label_size':'huge'})
+        with self.assertRaises(ValueError):settings.validate({'runway_extensions':'yes'})
+        factors=[settings.label_scale(settings.DEFAULTS,r) for r in (20,10,5,2)]
+        self.assertEqual(factors,sorted(set(factors)))
+        self.assertGreater(settings.label_scale(dict(settings.DEFAULTS,label_size='large'),20),factors[0])
+        obj=gui();origin=obj.airport_origin
+        airport=dict(obj.catalog.airports['KRHV'],ident='TEST',code='TEST',lat=origin[0],lon=origin[1],runways=[dict(le_latitude_deg=origin[0]-.005,le_longitude_deg=origin[1],he_latitude_deg=origin[0]+.005,he_longitude_deg=origin[1])])
+        obj.catalog.airports['TEST']=airport
+        with patch.object(obj.catalog,'nearby',return_value=[(0,airport,0)]):
+            def redraw(radius):
+                obj.radius_nm=radius;obj.airport_query=None;obj.draw()
+                return [coords for name,coords,kw in obj.canvas.commands if kw.get('tags')=='runway-extension']
+            self.assertEqual(len(redraw(5)),2)
+            for coords in redraw(5):self.assertAlmostEqual(math.dist(coords[:2],coords[2:])/obj.pixels,3,places=4)
+            self.assertFalse(redraw(10))
+            obj.config['runway_extensions']=False;self.assertFalse(redraw(5))
+            obj.config['runway_extensions']=True;airport['runways']=[dict(length_ft=3000,le_heading_degT=90)]
+            self.assertFalse(redraw(5))  # A schematic is not a located centerline.
+        obj.stop.set()
+
     def test_wake_then_range_and_exit_touch_actions(self):
         obj=gui();obj.touch_debug=True
         from io import StringIO

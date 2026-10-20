@@ -1,3 +1,5 @@
+Web v0.1.5 adds Label size (Normal, Large, Extra large), progressive label scaling at 10/5/2 NM, filled airport symbols, priority collision handling, and optional gray dashed runway extensions 3 NM beyond actual runway ends at 5 NM and closer. Extensions are visual alignment aids; they do not indicate an approach clearance or terrain/obstacle clearance.
+
 Web v0.1.4 enlarges airport symbols 40% and uses magenta for non-towered airports, bright blue for towered airports, and neutral gray for unknown status. All four local demo airports are non-towered.
 
 Web v0.1.3 adds airport pattern spacing, a north compass arrow, separate © 2026 FishFinder attribution, and stable fictional NX registrations (three digits, one letter, no I or O). These are synthetic identifiers, not verified real registrations.
