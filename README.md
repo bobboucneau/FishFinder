@@ -1,3 +1,5 @@
+v0.4.25 is a documentation release: extensive plain-language comments across all original Python files and launch scripts, plus a [code-reading guide](CODE-READING-GUIDE.md) and [GPLv3 release plan](LICENSING-PLAN.md). All 28 executable Python syntax trees and non-comment launcher lines match v0.4.24; 73 Python tests passed. The tester website and formal project license are unchanged. See COMMENTING-VERIFICATION.json for the recorded comparison.
+
 v0.4.24 shows optional 3 NM runway centerline extensions at all four ranges (2, 5, 10 and 20 NM). The existing Setup switch, endpoint validation and circular clipping remain. Desktop checks passed; Pi hardware testing is pending.
 
 v0.4.23 adds Normal/Large/Extra-large label sizes, zoom scaling (20/10/5/2 NM: 1/1.12/1.25/1.4), and optional 3 NM dashed runway centerline extensions at 5 NM and closer. Only actual runway endpoints are extended; schematic and closed runways are excluded. Airport symbols are now filled. Town labels yield to aircraft and airport labels. Settings default to Normal with extensions enabled. Pi hardware validation is pending.

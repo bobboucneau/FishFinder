@@ -1,4 +1,13 @@
 """Read spatially indexed global ground data. Standard library only on the Pi."""
+
+# READING THIS FILE: the earlier, compact SQLite world-map format.
+#
+# This reader opens the map read-only, checks its format identifier, and queries
+# only features whose bounding rectangles touch the requested view. The geometry
+# is compressed JSON, so decoding has explicit memory limits. A view can cross
+# longitude +180/-180; query_bounds() then returns two longitude intervals.
+# This format remains supported alongside the richer PMTiles map.
+
 import json
 import math
 import sqlite3
@@ -9,6 +18,7 @@ DEFAULT_PATH=Path('/var/local/FishFinder/world_ground.sqlite')
 APPLICATION_ID=0x46464D50
 MAX_FEATURE_BYTES=8_000_000
 
+# Decompress one map feature with a strict output-byte limit, then read its JSON coordinates.
 def decode(blob):
     unpacker=zlib.decompressobj()
     try:raw=unpacker.decompress(blob,MAX_FEATURE_BYTES+1)
@@ -16,6 +26,8 @@ def decode(blob):
     if len(raw)>MAX_FEATURE_BYTES or not unpacker.eof:raise ValueError('Oversized map feature')
     return json.loads(raw)
 
+# Compute latitude limits and one or two longitude intervals for the circular view, including
+# date-line crossings.
 def query_bounds(origin,radius):
     lat,lon=origin
     if not(-90<=lat<=90 and -180<=lon<=180 and 2<=radius<=20):raise ValueError('Invalid map query')
@@ -29,7 +41,9 @@ def query_bounds(origin,radius):
         ranges=[(west,east)] if west>=-180 and east<=180 else ([(west+360,180),(-180,east)] if west<-180 else [(west,180),(-180,east-360)])
     return south,north,ranges
 
+# A read-only connection to the legacy spatially indexed SQLite map.
 class WorldMap:
+    # Verify the database format identifier and schema before querying any features.
     def __init__(self,path):
         self.conn=sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro',uri=True)
         try:
@@ -38,7 +52,10 @@ class WorldMap:
             if self.metadata.get('schema')!='1':raise ValueError('Unsupported world map schema')
         except Exception:
             self.conn.close();raise
+    # Release the map database connection.
     def close(self):self.conn.close()
+    # Fetch only intersecting features, decode them within a vertex budget, and separate
+    # filled polygons from line paths.
     def query(self,origin,radius):
         south,north,ranges=query_bounds(origin,radius)
         rows={}

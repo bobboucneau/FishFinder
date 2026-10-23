@@ -1,3 +1,9 @@
+# READING THE TESTS: this file checks behavior without requiring a flight.
+# An assert... call states what must be true; a failed assertion means the
+# observed result differs from the expected one. Mock/patch objects temporarily
+# replace a dependency, so tests can exercise errors without changing hardware.
+# These checks on a Mac do not replace touchscreen/GPS validation on the Pi.
+
 import csv
 from datetime import date,datetime,timedelta,timezone
 import io
@@ -25,6 +31,7 @@ class Tests(unittest.TestCase):
                 text=io.StringIO();w=csv.DictWriter(text,fieldnames=rows[0]);w.writeheader();w.writerows(rows);z.writestr(name,text.getvalue())
         return stream.getvalue()
     def candidate(self):return dict(airports=[dict(ident='KCPU',code='KCPU',country='US',lat=38.146,lon=-120.648)])
+    # Check: u arrows point to threshold on correct pattern side.
     def test_u_arrows_point_to_threshold_on_correct_pattern_side(self):
         import math
         for heading in ((0,-1),(1,0),(0,1),(-1,0)):
@@ -41,9 +48,11 @@ class Tests(unittest.TestCase):
                 downwind=(points[1][0]-points[0][0],points[1][1]-points[0][1])
                 self.assertLess(downwind[0]*heading[0]+downwind[1]*heading[1],0)
 
+    # Check: effective cycle not preview.
     def test_effective_cycle_not_preview(self):
         html='<a href="/air_traffic/flight_info/aeronav/Aero_Data/NASR_Subscription/2026-10-29/">preview</a><a href="/air_traffic/flight_info/aeronav/Aero_Data/NASR_Subscription/2026-10-01/">current</a>'
         self.assertEqual(faa.cycle_links(html,date(2026,10,16))[0],date(2026,10,1))
+    # Check: msl and present end default left.
     def test_msl_and_present_end_default_left(self):
         data=self.candidate();eff=datetime.now(timezone.utc).date().isoformat()
         faa.enrich(data,self.archive(),eff,'FAA');a=data['airports'][0]
@@ -53,6 +62,7 @@ class Tests(unittest.TestCase):
         faa.enrich(data,self.archive(flag='Y',remark='TPA RWY 13 800 FT AGL.'),eff,'FAA')
         self.assertIsNone(a['reference']['pattern_msl_ft'])
         self.assertEqual(a['reference']['patterns']['13'],'Right')
+    # Check: expiry tower unknown and complex suppress arrows.
     def test_expiry_tower_unknown_and_complex_suppress_arrows(self):
         obj=gui();a=obj.catalog.airports['KCPU']
         self.assertEqual(ref.current_reference(a,date(2026,10,29)),{})
@@ -63,6 +73,7 @@ class Tests(unittest.TestCase):
             a=dict(a,reference=dict(a['reference'],tower=tower));self.assertIsNone(ref.pattern(a,'31'))
         a=dict(a,type='large_airport');self.assertFalse(ref.simple_airport(a))
         obj.stop.set()
+    # Check: full screen has no underlying targets.
     def test_full_screen_has_no_underlying_targets(self):
         obj=gui();obj.airport_selected='KO22';obj.airport_details()
         self.assertEqual(obj.buttons,[]);self.assertEqual(obj.hits,[]);self.assertEqual(obj.airport_hits,[])
@@ -71,6 +82,7 @@ class Tests(unittest.TestCase):
         obj.airport_action('view');self.assertTrue(obj.airport_runways)
         obj.airport_action('close');self.assertIsNone(obj.airport_selected)
         obj.stop.set()
+    # Check: red arrows and persistent version.
     def test_red_arrows_and_persistent_version(self):
         obj=gui();obj.airport_selected='KO22';obj.draw()
         arrows=[kw for name,_,kw in obj.canvas.commands if name=='create_line' and kw.get('arrow')=='last']
@@ -81,6 +93,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(chars,'v'+obj.version+'©2026FishFinder')
         obj.stop.set()
 
+    # Check: standard and runway specific altitude.
     def test_standard_and_runway_specific_altitude(self):
         obj=gui();a=obj.catalog.airports['KCPU']
         a=dict(a,reference=dict(a['reference'],effective=datetime.now(timezone.utc).date().isoformat(),expires=(datetime.now(timezone.utc).date()+timedelta(days=28)).isoformat()))
@@ -93,12 +106,14 @@ class Tests(unittest.TestCase):
         self.assertIsNone(ref.pattern_altitude(a,a['runways'][0])[0])
         obj.stop.set()
 
+    # Check: due 28 day and faa expiry.
     def test_due_28_day_and_faa_expiry(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)/'airports.json'
             d=dict(downloaded_utc='2026-10-16',airports=[dict(country='US')],faa=dict(effective='2026-10-01',expires='2026-10-29'))
             p.write_text(json.dumps(d));self.assertFalse(updater.update_due(p,date(2026,10,28)));self.assertTrue(updater.update_due(p,date(2026,10,29)))
             d['airports']=[];p.write_text(json.dumps(d));self.assertFalse(updater.update_due(p,date(2026,11,12)));self.assertTrue(updater.update_due(p,date(2026,11,13)))
+    # Check: failed faa enrichment preserves cache.
     def test_failed_faa_enrichment_preserves_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)/'airports.json';p.write_text('{"airports":[]}');before=p.read_bytes()

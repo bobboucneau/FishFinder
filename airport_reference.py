@@ -1,22 +1,42 @@
 """Round-screen airport quick reference; no claim to be an FAA airport diagram."""
+
+# READING THIS FILE: the full-screen airport quick reference.
+#
+# This is a simplified drawing, not an FAA airport diagram. The code first asks
+# whether the airport is simple enough to depict; complex layouts get a prompt
+# to consult the official publication. Pattern arrows require a current explicit
+# reference and are not instructions or a clearance to fly the depicted path.
+#
+# Pattern altitudes shown here are MSL (feet above mean sea level). Published
+# AGL values are combined with field elevation during data import. A standard-
+# derived field-plus-1,000-foot fallback is marked with a different color and
+# footnote. Keep that distinction when changing the presentation.
+
 from datetime import date,datetime,timezone
 import math
 import re
 from airport_data import number,runway_segments
 
+# Return FAA details only while their effective/expiry dates cover today. Otherwise return an
+# empty dictionary.
 def current_reference(a,today=None):
     ref=a.get('reference',{});today=today or datetime.now(timezone.utc).date()
     try:return ref if date.fromisoformat(ref['effective'])<=today<date.fromisoformat(ref['expires']) else {}
     except (ValueError,KeyError,TypeError):return {}
 
+# Select runway strips for this reference, excluding entries that are helicopter pads rather
+# than ordinary runways.
 def runways(a):
     return [r for r in a.get('runways',[]) if not (
         r.get('le_ident','').startswith('H') and r.get('he_ident','').startswith('H'))]
 
+# Normalize radio category names, including a UNICOM entry explicitly described as CTAF.
 def radio_kind(f):
     kind=f.get('type','').upper()
     return 'CTAF' if kind=='UNIC' and 'CTAF' in f.get('description','').upper() else kind
 
+# Check runway/radio/procedure complexity before offering the small-screen diagram. This is a
+# presentation limit, not an airport-operating rule.
 def simple_airport(a):
     strips=runways(a)
     primary={}
@@ -28,18 +48,24 @@ def simple_airport(a):
             all(r.get('closed')!='1' and all(re.fullmatch(r'(?:0?[1-9]|[12][0-9]|3[0-6])[LCR]?',r.get(key,'')) for key in ('le_ident','he_ident')) for r in strips) and
             not a.get('reference',{}).get('special_pattern'))
 
+# Choose the user-selected strip, or use the longest available strip as the initial
+# selection.
 def active_runway(a,index):
     strips=runways(a)
     if not strips:return None,0
     if index is None:index=max(range(len(strips)),key=lambda i:number(strips[i].get('length_ft')) or 0)
     index=max(0,min(index,len(strips)-1));return strips[index],index
 
+# Return a known pattern side for a runway end only when the reference permits it; unknown is
+# not automatically left.
 def pattern(a,end):
     ref=current_reference(a)
     if ref.get('tower')!='non-towered' or not simple_airport(a):return None
     return ref.get('patterns',{}).get(end)
 
 
+# Prefer published runway-specific/published airport pattern altitude, otherwise return a
+# clearly identified standard-derived MSL fallback when appropriate.
 def pattern_altitude(a,runway):
     ref=current_reference(a)
     if not ref or ref.get('tower')!='non-towered' or not simple_airport(a):return None,''
@@ -58,6 +84,8 @@ def pattern_altitude(a,runway):
     if values:return None,''
     return round(elev+1000),'Standard-derived · verify local procedures'
 
+# Lay out airport name, elevation, radios, pattern details, runway sketch and actions across
+# the round screen.
 def draw(d,a):
     # The airport owns the whole scope while open: no map/control hitboxes behind it.
     d.canvas.delete('all');d.buttons=[];d.hits=[];d.airport_hits=[];d.airport_buttons=[]
@@ -79,6 +107,8 @@ def draw(d,a):
     if d.airport_runways:
         detail_page(d,a);buttons(d,a);return
     d.airport_page=0
+    # A small screen cannot safely summarize every complex airport. Explicitly defer to
+    # official publications when our presentation limits are exceeded.
     if not simple_airport(a):
         d.text(400,340,'See FAA Airport Diagram' if a.get('country')=='US' else 'See official airport diagram',size=20,width=530*d.unit)
         d.text(400,385,'and Chart Supplement' if a.get('country')=='US' else 'and aeronautical publication',size=17)
@@ -90,6 +120,9 @@ def draw(d,a):
         else:label='Pattern direction unavailable'
         d.text(400,282,label,size=16,width=600*d.unit)
         altitude,provenance=pattern_altitude(a,runway)
+        # Keep the visual marker and footnote tied to the data's provenance. A field-
+        # plus-1,000-foot estimate must not look identical to a published airport-specific
+        # altitude.
         standard=provenance.startswith('Standard')
         d.text(400,316,(f'Pattern {altitude:,.0f} ft MSL'+(' *' if standard else '')) if altitude is not None else 'Pattern altitude unavailable',size=18,fill='#ffd45c' if standard else '#e0f2ef')
         if provenance:d.text(400,341,'* Field + 1,000 ft; verify local procedures' if standard else provenance,size=10,fill='#ffd45c' if standard else '#9fb8c6')
@@ -100,6 +133,8 @@ def draw(d,a):
                 d.airport_button(x,600,x+180,640,f"RWY {r.get('le_ident','?')}/{r.get('he_ident','?')}",f'runway:{i}')
     buttons(d,a)
 
+# Add navigation controls and visible source/freshness information below the diagram or data
+# page.
 def buttons(d,a):
     d.airport_button(225,654,395,699,'Reference' if d.airport_runways else 'Radios / data','view')
     d.airport_button(405,654,575,699,'Back to traffic','close')
@@ -109,6 +144,8 @@ def buttons(d,a):
     d.text(400,722,source,size=10,fill='#ffd45c' if ref and not current_reference(a) else '#9fb8c6',width=490*d.unit)
     d.text(400,748,'Quick reference · verify current publications',size=10,fill='#ffd45c')
 
+# Show the paged list of radios, remarks, provenance and explanation that does not fit the
+# main quick reference.
 def detail_page(d,a):
     rows=[]
     for f in a.get('frequencies',[]):rows.append(f"{f.get('type','Radio')} {f.get('frequency_mhz','?')} · {f.get('description','')}")
@@ -137,21 +174,29 @@ def pattern_arrow(point,heading,direction):
     points.append((x-hx*7,y-hy*7))
     return points
 
+# Fit known runway geometry into the diagram area; draw the selected strip, labels, compass
+# and pattern arrows.
 def diagram(d,a,selected):
     from traffic_display import xy
+    # Use airport-relative geometry for the diagram. Schematic fallback can be shown as a
+    # sketch, but must not be mistaken for known positioned runway endpoints.
     segments=runway_segments(dict(a,runways=runways(a)),xy)
     if not segments:
         d.text(400,440,'Runway geometry unavailable',size=16);return
     points=[v for _,p,q,_ in segments for v in (p,q)]
     mid=((min(v[0] for v in points)+max(v[0] for v in points))/2,(min(v[1] for v in points)+max(v[1] for v in points))/2)
     scale=min(390/max(.01,max(v[0] for v in points)-min(v[0] for v in points)),140/max(.01,max(v[1] for v in points)-min(v[1] for v in points)))
+    # Convert an airport-relative point into this diagram area, which has its own center and
+    # scale.
     def screen(v):return (400+(v[0]-mid[0])*scale,450-(v[1]-mid[1])*scale)
+    # Flatten diagram points into Canvas coordinates before drawing one connected stroke.
     def line(points,**kw):
         coords=[n for x,y in points for n in (d.cx+(x-400)*d.unit,d.cy+(y-400)*d.unit)]
         d.canvas.create_line(*coords,**kw)
     d.text(586,365,'N',size=13,fill='#dceeee')
     line([(572,398),(600,398)],fill='#9fb8c6',width=d.unit)
     line([(586,376),(586,420)],fill='#9fb8c6',width=d.unit)
+    # Fill one half of the compass arrow in its contrasting color.
     def triangle(points,color):
         coords=[n for x,y in points for n in (d.cx+(x-400)*d.unit,d.cy+(y-400)*d.unit)]
         d.canvas.create_polygon(*coords,fill=color,outline=color,tags='airport-compass')
@@ -159,6 +204,8 @@ def diagram(d,a,selected):
     triangle([(586,376),(594,408),(586,402)],'#658b9e')
     label_positions=[]
     screen_segments=[(screen(p),screen(q)) for _,p,q,_ in segments]
+    # Measure how close a candidate label is to a runway segment so labels can avoid the
+    # runway itself.
     def distance(point,a,b):
         dx,dy=b[0]-a[0],b[1]-a[1];den=dx*dx+dy*dy
         t=max(0,min(1,((point[0]-a[0])*dx+(point[1]-a[1])*dy)/den)) if den else 0

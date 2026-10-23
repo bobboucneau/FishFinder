@@ -1,5 +1,18 @@
 #!/usr/local/Fishfinder/.venv/bin/python3
 """Download OurAirports reference data and atomically create an offline cache."""
+
+# READING THIS FILE: safely replace the offline airport-data snapshot.
+#
+# Download airport, runway, and frequency tables; join them by airport identity;
+# then add current FAA reference details for US airports. A candidate must pass
+# sanity checks before it replaces the installed file. A failed or suspicious
+# update leaves the working cache intact.
+#
+# 'Atomic replacement' means readers see either the old complete file or the
+# new complete file, never a half-written download. A lock prevents two updates
+# from writing at once. The background due-check follows the 28-day data cycle;
+# it does not automatically change the user's Wi-Fi network.
+
 import argparse
 import csv
 import io
@@ -17,6 +30,7 @@ RUNWAY_FIELDS = ('length_ft','width_ft','surface','lighted','closed','le_ident',
  'le_latitude_deg','le_longitude_deg','he_latitude_deg','he_longitude_deg','le_heading_degT','he_heading_degT')
 
 
+# Download one CSV table with size/column checks and return its parsed rows.
 def fetch(name):
     request = urllib.request.Request(BASE+name, headers={'User-Agent':'FishFinder-reference-cache/0.2'})
     with urllib.request.urlopen(request, timeout=90) as response:
@@ -30,6 +44,7 @@ def fetch(name):
     return list(rows)
 
 
+# Join usable airports, their runways and their frequencies into one candidate JSON catalog.
 def build(airports, runways, frequencies, countries=()):
     result = {}
     for row in airports:
@@ -54,6 +69,8 @@ def build(airports, runways, frequencies, countries=()):
     return dict(schema=1, downloaded_utc=datetime.now(timezone.utc).isoformat(), source='OurAirports', countries=list(countries), airports=list(result.values()))
 
 
+# Build and validate a complete candidate, add FAA details when needed, and atomically
+# replace the installed catalog only on success.
 def _refresh(output, countries=None):
     output=Path(output)
     problem=write_problem(output,atomic=True)
@@ -63,6 +80,8 @@ def _refresh(output, countries=None):
         except (OSError,ValueError): countries=[]
     data=build(fetch('airports.csv'),fetch('runways.csv'),fetch('airport-frequencies.csv'),countries)
     # Reject a suspiciously truncated update under the same regional scope.
+    # Compare a new download with the installed catalog only when their region filters agree.
+    # A large unexplained loss of airports could mean a truncated or wrong download.
     if output.exists():
         try: old=json.loads(output.read_text())
         except (OSError,ValueError): old={}
@@ -72,6 +91,8 @@ def _refresh(output, countries=None):
         raise ValueError('No runway records; old cache retained')
     if not any(a['frequencies'] for a in data['airports']):
         raise ValueError('No frequency records; old cache retained')
+    # US references need their FAA enrichment before installation. If this stage fails, keep
+    # the old complete cache rather than install a partially enriched candidate.
     if any(a.get('country')=='US' for a in data['airports']):
         from faa_airports import fetch_enrichment
         fetch_enrichment(data)
@@ -83,6 +104,8 @@ def _refresh(output, countries=None):
             temp = Path(stream.name)
             json.dump(data,stream,ensure_ascii=False,separators=(',',':'))
             stream.flush(); os.fsync(stream.fileno())
+        # This is the installation point. Everything above prepared and checked a candidate;
+        # no installed data was replaced before this statement.
         os.replace(temp,output)
     finally:
         if temp is not None and temp.exists(): temp.unlink()
@@ -90,16 +113,22 @@ def _refresh(output, countries=None):
 
 
 
+# Acquire a nonblocking update lock before starting the actual replacement, so simultaneous
+# update requests do not race.
 def refresh(output,countries=None):
     import fcntl
     output=Path(output)
     problem=write_problem(output,atomic=True)
     if problem:raise PermissionError(problem)
+    # The lock file is separate from the data file. Nonblocking locking reports an update
+    # already in progress instead of silently waiting inside a UI-triggered action.
     with output.with_suffix('.update.lock').open('a') as lock:
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:raise RuntimeError('Airport update already in progress') from None
         return _refresh(output,countries)
 
+# Compare the snapshot age and FAA effective dates with today to determine whether an update
+# is due.
 def update_due(output,today=None):
     from datetime import date,timedelta
     today=today or datetime.now(timezone.utc).date()
@@ -115,13 +144,18 @@ def update_due(output,today=None):
 
 class AutomaticUpdates:
     """Daily due check; network/update work runs off the UI thread. No Wi-Fi changes."""
+    # Prepare the timer/result queue used for occasional background due checks.
     def __init__(self,path):
         import queue
         self.path=path;self.next_check=0;self.results=queue.Queue();self.busy=False
+    # Check for completed updates and schedule a due check at the allowed interval without
+    # blocking the UI.
     def poll(self):
         import threading,time,queue
         if time.monotonic()>=self.next_check and not self.busy:
             self.next_check=time.monotonic()+86400;self.busy=True
+            # Perform the slow due-check/update job off the UI thread and return its outcome
+            # via the queue.
             def work():
                 try:
                     if update_due(self.path):
@@ -133,6 +167,7 @@ class AutomaticUpdates:
         except queue.Empty:return None
 
 
+# Read the requested output path/country filter and run a manual reference-data refresh.
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output',type=Path,default=Path(__file__).resolve().parent/'airports.json')

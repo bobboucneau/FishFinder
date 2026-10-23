@@ -1,4 +1,18 @@
 """Touch settings panel. Network/data jobs never block Tk's event loop."""
+
+# READING THIS FILE: the touch-friendly Setup pages and background actions.
+#
+# The Setup object owns temporary editable copies of settings. Restoring defaults
+# changes those copies; Save / Back validates and writes them. Closing without
+# saving leaves the existing application settings in place.
+#
+# Tk variables connect editable controls to Python values. Button callbacks are
+# functions called later when the user presses a button, not during layout.
+# Network/data operations run on worker threads and report through a queue.
+# poll() checks that queue from the window thread so the UI remains responsive.
+# Changing Wi-Fi is a user-triggered action; the program does not choose a new
+# network merely because the current Stratux connection is unavailable.
+
 import queue
 import shutil
 import subprocess
@@ -17,6 +31,8 @@ class Setup:
         self.display=display; self.jobs=queue.Queue(); self.closed=False; self.busy=False
         self.frame=tk.Frame(display.root,bg=BG,highlightbackground='#50ef97',highlightthickness=2)
         self.frame.place(relx=.5,rely=.5,anchor='center',relwidth=.68,relheight=.68)
+        # Each editable field gets a Tk variable. These temporary UI values are distinct from
+        # the saved configuration until Save / Back succeeds.
         self.vars={};self.focus=None;self.keyboard=None;self.refresh_button=None
         for key,value in display.config.items():
             self.vars[key]=tk.BooleanVar(value=value) if isinstance(value,bool) else tk.StringVar(value=str(value))
@@ -96,6 +112,8 @@ class Setup:
         for key,var in self.vars.items():var.set(settings.DEFAULTS[key])
         self.status.set('Defaults restored in this form. Tap Save to apply.')
 
+    # Save is the boundary between editing and applying. Validation errors stay visible in
+    # the panel instead of closing it with a bad configuration.
     def save(self):
         try:self.display.apply_settings({key:var.get() for key,var in self.vars.items()})
         except (ValueError,OSError,TypeError) as exc:self.status.set(str(exc));return
@@ -108,6 +126,9 @@ class Setup:
         import time
         self.display.last_touch=time.monotonic();self.display.draw()
 
+    # This workflow delegates Wi-Fi activation to NetworkManager and requires the user's
+    # explicit selection. A listed/highlighted network is not the same as an activated
+    # connection.
     def network(self):
         command=shutil.which('nmcli')
         if not command:

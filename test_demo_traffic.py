@@ -1,3 +1,9 @@
+# READING THE TESTS: this file checks behavior without requiring a flight.
+# An assert... call states what must be true; a failed assertion means the
+# observed result differs from the expected one. Mock/patch objects temporarily
+# replace a dependency, so tests can exercise errors without changing hardware.
+# These checks on a Mac do not replace touchscreen/GPS validation on the Pi.
+
 from contextlib import closing
 import itertools
 import math
@@ -13,6 +19,7 @@ from test_airports import Canvas,gui
 
 
 class DemoTests(unittest.TestCase):
+    # Check: fictional registrations stable unique and no io.
     def test_fictional_registrations_stable_unique_and_no_io(self):
         scene=Scenario();seen={}
         for t in range(0,3601,30):
@@ -23,6 +30,7 @@ class DemoTests(unittest.TestCase):
                 seen[address]=tail
         self.assertEqual(len(seen.values()),len(set(seen.values())))
 
+    # Check: airport patterns and two circuits.
     def test_airport_patterns_and_two_circuits(self):
         scene=Scenario()
         for points,elevation in zip(scene.patterns,[2100,2933,1325,234]):
@@ -39,6 +47,7 @@ class DemoTests(unittest.TestCase):
                     self.assertAlmostEqual(v[0]*w[0]+v[1]*w[1],0,places=6)
         scene.advance(0);self.assertGreater(scene.flights[0].end,330)
 
+    # Check: hour of traffic is separated and repeatable.
     def test_hour_of_traffic_is_separated_and_repeatable(self):
         scene=Scenario();kinds=set();both=False
         for t in range(3601):
@@ -52,6 +61,7 @@ class DemoTests(unittest.TestCase):
         self.assertEqual(kinds,{'C172','airliner','GA','helicopter'});self.assertTrue(both)
         self.assertEqual(Scenario(seed=22).messages(600),Scenario(seed=22).messages(600))
 
+    # Check: demo messages use real database pipeline.
     def test_demo_messages_use_real_database_pipeline(self):
         scene=Scenario();traffic,own=scene.messages(600);now=time.time()
         own['BaroLastMeasurementTime']=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime(now))
@@ -63,6 +73,7 @@ class DemoTests(unittest.TestCase):
             snap=read_snapshot(path)
             self.assertEqual(len(snap.reports),len(traffic));self.assertEqual(snap.ownship[0].comparison_alt,5000)
 
+    # Check: ownship tail source selection and fallback.
     def test_ownship_tail_source_selection_and_fallback(self):
         from traffic_display import Point,Snapshot,select_ownship
         from settings import DEFAULTS
@@ -80,6 +91,7 @@ class DemoTests(unittest.TestCase):
         estimated=Point(2,now,38,-121,110,6000,None,None,True,0)
         self.assertEqual(select_ownship(snap,{'icao:123':[estimated]},cfg,now)[1],[gps])
 
+    # Check: write preflight checks before airport download.
     def test_write_preflight_checks_before_airport_download(self):
         from unittest.mock import patch
         from fs_checks import write_problem
@@ -95,6 +107,7 @@ class DemoTests(unittest.TestCase):
         # A 68% square's corners remain inside the 398-pixel round display.
         self.assertLess(math.hypot(800*.68/2,800*.68/2),398)
 
+    # Check: standard rate pattern arcs.
     def test_standard_rate_pattern_arcs(self):
         scene=Scenario();scene.advance(0);flight=scene.flights[0]
         headings=[]
@@ -104,6 +117,7 @@ class DemoTests(unittest.TestCase):
         self.assertLessEqual(max(changes),3.01)
         self.assertGreater(sum(abs(x-3)<.01 for x in changes),100)
 
+    # Check: latest course and orbit center left.
     def test_latest_course_and_orbit_center_left(self):
         from traffic_display import Point,velocity,xy,rotate
         scene=Scenario()
@@ -121,6 +135,7 @@ class DemoTests(unittest.TestCase):
         p=[Point(1,0,37,-122,100,5000),Point(2,7,37.01,-122,100,5000),Point(3,10,37.01,-121.998,100,5000)]
         self.assertGreater(velocity(p)[0],0);self.assertLess(abs(velocity(p)[1]),1e-5)
 
+    # Check: orientation and ownship trail projection.
     def test_orientation_and_ownship_trail_projection(self):
         from traffic_display import HORIZON
         from settings import DEFAULTS
@@ -136,6 +151,7 @@ class DemoTests(unittest.TestCase):
         labels=[o.get('text') for k,c,o in display.canvas.commands]
         self.assertTrue(all(label in labels for label in ('N','S','E','W')))
 
+    # Check: moving demo reaches display with airports.
     def test_moving_demo_reaches_display_with_airports(self):
         scene=Scenario();now=time.time();display=gui();display.args.demo=False
         with tempfile.TemporaryDirectory() as tmp:
@@ -158,6 +174,7 @@ class DemoTests(unittest.TestCase):
             self.assertTrue(display.airports_visible);self.assertEqual(display.radius_nm,20)
             self.assertTrue(any(ident=='KO22' for x,y,ident in display.airport_hits))
 
+    # Check: splash has readable title on round canvas.
     def test_splash_has_readable_title_on_round_canvas(self):
         c=Canvas();draw_splash(c,800,800)
         text=[options['text'] for kind,coords,options in c.commands if kind=='create_text']

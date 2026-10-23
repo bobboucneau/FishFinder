@@ -5,6 +5,30 @@ python3 traffic_display.py --demo
 python3 traffic_display.py --fullscreen
 All GUI operations stay on Tk's main thread; database reads run separately.
 """
+
+# READING THIS FILE: the interactive traffic display.
+#
+# This program does not receive aircraft directly. A background reader obtains
+# recent database rows and gives the Tkinter window a snapshot. Display.tick()
+# is the repeating heartbeat; Display.draw() turns the newest snapshot into one
+# picture. Only the window's main thread touches Tkinter widgets.
+#
+# The first group of functions deals with numbers and geometry, not pixels.
+# Latitude/longitude become local east/north distances in nautical miles.
+# Velocity is east/north distance per SECOND, although displayed speed is knots
+# (nautical miles per HOUR). Altitudes are feet. Do not compare pressure altitude
+# with GPS altitude as though they share the same reference.
+#
+# A trail joins past reports. A projected line extends the current velocity;
+# it does not predict a planned turn. The five-minute proximity assessment is
+# separate from the user-selectable length of that projected line. Unknown or
+# stale data must stay visibly uncertain rather than quietly disappearing.
+#
+# The Display class holds window state: self means this particular display.
+# Its drawing helpers convert the 800-by-800 design into actual screen pixels.
+# The tap handlers decide whether a finger selected one target, a crowded group,
+# a visible control, or the double-tap gesture that wakes hidden controls.
+
 import argparse
 import json
 import settings
@@ -21,6 +45,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from airport_data import AirportCatalog, BLUE, rotate, runway_segments, freshness_label, airport_color
 
+# Units matter throughout the geometry: Earth radius and horizontal distances are nautical
+# miles; HORIZON/ages are seconds; altitudes and vertical thresholds are feet. FRAME_MS is
+# milliseconds between requested UI updates.
 EARTH_NM = 3440.065
 HORIZON = 300.0
 REPORT_AGE = 60.0
@@ -33,20 +60,29 @@ ESTIMATED = '#c58aff'
 WHITE, MUTED, BG = '#e0f2ef', '#7b9a95', '#030909'
 
 
+# One timestamped position report. The immutable record keeps coordinates, speed, display
+# altitude and separate comparison-altitude metadata together.
 @dataclass(frozen=True)
 class Point:
+    # A dataclass supplies a convenient constructor for these named fields. The type labels
+    # describe intended values; validation happens in point(), not automatically because a
+    # field says float.
     id: int
     time: float
     lat: float
     lon: float
     speed: float
     altitude: float
+    # Keep the source/reference of an altitude comparison with the number itself. An altitude
+    # good enough to display is not automatically safe to compare against another source.
     comparison_alt: float = None
     alt_ref: str = None
     estimated: bool = False
     position_age: float = None
 
 
+# A package of reports, ownship history, identity labels and receiver state handed from the
+# reader to the window.
 @dataclass
 class Snapshot:
     reports: dict
@@ -57,6 +93,7 @@ class Snapshot:
     receiver: tuple = None
 
 
+# Convert a database value to a finite number; malformed or missing data becomes None.
 def finite(value):
     try:
         n = float(value)
@@ -65,6 +102,8 @@ def finite(value):
         return None
 
 
+# Convert a SQLite row to a validated Point. Unknown altitude can remain None, but missing
+# position/speed cannot become a plotted point.
 def point(row):
     values = [finite(row[k]) for k in ('time', 'latitude', 'longitude', 'speed', 'asl')]
     if any(v is None for v in values[:4]):
@@ -78,12 +117,16 @@ def point(row):
 def xy(lat, lon, origin):
     """Great-circle distance/bearing mapped to a local east/north plane, NM."""
     a, b = map(math.radians, (origin[0], lat))
+    # Wrap longitude difference to -180..180 degrees so points on opposite sides of the date
+    # line stay close. Trigonometry uses radians, not the degrees shown on maps.
     dl = math.radians((lon - origin[1] + 180) % 360 - 180)
     y = math.sin(dl) * math.cos(b)
     x = math.cos(a) * math.sin(b) - math.sin(a) * math.cos(b) * math.cos(dl)
     hav = math.sin((b-a)/2)**2 + math.cos(a)*math.cos(b)*math.sin(dl/2)**2
     distance = 2 * EARTH_NM * math.asin(math.sqrt(min(1, max(0, hav))))
     bearing = math.atan2(y, x)
+    # Return a pair: positive east is right in a north-up map; positive north is up. Pixel
+    # conversion later reverses the vertical sign because screen y grows downward.
     return distance * math.sin(bearing), distance * math.cos(bearing)
 
 
@@ -101,6 +144,8 @@ def velocity(history):
     latest = history[-1]
     if latest.speed <= 0.5:
         return (0.0, 0.0)
+    # Try the newest earlier observations first so a recent turn is not diluted by an average
+    # over the whole trail. Skip nearly identical positions and implausible jumps.
     for previous in reversed(history[:-1]):
         dt = latest.time - previous.time
         if 0.2 <= dt <= 10:
@@ -108,12 +153,20 @@ def velocity(history):
             distance = math.hypot(east, north)
             # Reject tiny GPS jitter and implausible jumps rather than inventing track.
             if distance >= 0.002 and distance/dt*3600 <= max(600, latest.speed*3):
+                # Knots are nautical miles per hour. Divide by 3,600 to multiply this
+                # velocity by future seconds without introducing a 3,600-times distance
+                # error.
                 speed = latest.speed/3600
                 return east/distance*speed, north/distance*speed
     return None
 
 
+# Find when two straight, constant-velocity horizontal tracks pass closest during the five-
+# minute horizon; return time and separation.
 def closest_approach(relative, relative_velocity):
+    # Work in relative motion: imagine ownship stationary and subtract its velocity from the
+    # target's. The dot product tells whether their horizontal distance is decreasing. Clamp
+    # the nearest time to now..five minutes.
     speed2 = sum(v*v for v in relative_velocity)
     t = 0 if speed2 < 1e-12 else max(0, min(HORIZON, -sum(a*b for a,b in zip(relative, relative_velocity))/speed2))
     return t, math.hypot(relative[0]+relative_velocity[0]*t, relative[1]+relative_velocity[1]*t)
@@ -125,8 +178,13 @@ def turn_possible(relative, own_velocity, speed):
     Conservative envelope: instant turn, any direction, no turn-rate limit.
     Minimize the convex distance-minus-reachable-radius function over 5 min.
     """
+    # At one future time, compare ownship distance with how far a target could travel after
+    # an instantaneous turn.
     def gap(t):
         return math.hypot(relative[0]-own_velocity[0]*t, relative[1]-own_velocity[1]*t) - speed/3600*t
+    # Search for the minimum gap between ownship's straight path and the target's reachable
+    # circle. This deliberately allows an instantaneous turn; it is a conservative
+    # possibility test, not a realistic turn prediction.
     lo, hi = 0.0, HORIZON
     for _ in range(50):
         a, b = (2*lo+hi)/3, (lo+2*hi)/3
@@ -137,15 +195,22 @@ def turn_possible(relative, own_velocity, speed):
     return min(gap(0), gap(HORIZON), gap((lo+hi)/2)) <= 1
 
 
+# Choose the horizontal proximity color and an explanation. Stale/missing-track data is
+# uncertain; red requires being within 1 NM and closing.
 def assess(relative, target_velocity, own_velocity, speed, stale=False):
     distance = math.hypot(*relative)
     if stale:
         return YELLOW, 'STALE: proximity assessment unavailable', None
     if own_velocity is None or target_velocity is None:
         return YELLOW, 'Ground track unavailable: proximity uncertain', None
+    # The same absolute heading can still produce closing motion if speeds differ. Subtract
+    # both east and north components before calculating closest approach.
     rv = (target_velocity[0]-own_velocity[0], target_velocity[1]-own_velocity[1])
     cpa = closest_approach(relative, rv)
     closing = sum(a*b for a,b in zip(relative, rv)) < -1e-6
+    # Red has the narrow, explicit rule 'already within 1 NM and closing horizontally'. A
+    # future close pass or a possible turn is yellow. This model is advisory and does not
+    # know the pilot's intentions.
     if distance <= 1 and closing:
         return RED, 'Within 1 NM and closing (horizontal)', cpa
     if cpa[1] <= 1:
@@ -161,10 +226,15 @@ def vertical_clear(target, own, threshold, horizon=300):
     Do not infer a zero rate from one sample or suppress unknown/stale altitude.
     """
     if not own or not target or own[-1].altitude is None: return False
+    # Estimate a vertical rate only from enough fresh observed pressure-altitude samples;
+    # otherwise return unknown.
     def state(history):
         latest=history[-1]
         if latest.estimated: return None
         if latest.comparison_alt is None or latest.alt_ref != 'pressure': return None
+        # A single altitude cannot establish a climb/descent rate. Require several recent
+        # samples with the same pressure reference; estimated points are not used to justify
+        # removing a target.
         recent=[p for p in history if 0<=latest.time-p.time<=20 and
                 p.comparison_alt is not None and p.alt_ref==latest.alt_ref]
         if len(recent)<3: return None
@@ -176,10 +246,15 @@ def vertical_clear(target, own, threshold, horizon=300):
     if time.time()-target[-1].time>10 or time.time()-own[-1].time>OWN_AGE: return False
     t,o=state(target),state(own)
     if t is None or o is None: return False
+    # Compare separation now and at the end of the five-minute constant-rate interval. The
+    # signs must agree, and both separations must exceed the threshold. Crossing levels would
+    # fail this test.
     delta=t[0]-o[0]; end=delta+(t[1]-o[1])*horizon
     return delta*end>0 and min(abs(delta),abs(end))>threshold
 
 
+# Open the collector database read-only, read recent histories and labels, then close the
+# connection. The display does not own database cleanup.
 def read_snapshot(path):
     # mode=ro prevents accidentally creating a database at a misspelled path.
     uri = Path(path).resolve().as_uri() + '?mode=ro'
@@ -210,6 +285,8 @@ def read_snapshot(path):
         conn.close()
 
 
+# Keep recent trail samples, then discard targets whose newest report is too old to be
+# active.
 def active_histories(reports, now):
     histories={k:[p for p in ps if 0<=now-p.time<=TRAIL_AGE] for k,ps in reports.items()}
     return {k:ps for k,ps in histories.items() if ps and now-ps[-1].time<=REPORT_AGE}
@@ -232,6 +309,8 @@ def select_ownship(snapshot,histories,config,now):
     return {k:v for k,v in histories.items() if k not in matching},own,source
 
 
+# Make the older fixed display-only sample scene. This differs from the moving collector demo
+# database.
 def demo_snapshot(no_ownship=False):
     now = time.time()
     origin = (37.3, -121.9)
@@ -257,11 +336,15 @@ def demo_snapshot(no_ownship=False):
     return Snapshot(reports, [] if no_ownship else own, demo=True)
 
 
+# Poll the database in a background thread and replace the queued snapshot with the newest
+# one. Convert read errors into displayable status.
 def reader(stop, out, path):
     while not stop.is_set():
         try:
             snapshot = read_snapshot(path)
         except Exception as exc:
+            # A Snapshot carries values, not Tk widgets. Reader errors become status text in
+            # a snapshot, allowing the UI thread to remain alive and responsive.
             snapshot = Snapshot({}, [], f'{type(exc).__name__}: {exc}')
         try:
             out.get_nowait()
@@ -292,6 +375,7 @@ def clip_segment(a, b, radius):
 def draw_splash(canvas,width,height):
     """Canvas artwork stays sharp on the round display without image dependencies."""
     canvas.delete('all');u=min(width,height)/800;cx=width/2;cy=height/2
+    # Map splash artwork coordinates to the current screen dimensions.
     def point(x,y):return cx+(x-400)*u,cy+(y-400)*u
     for i in range(80):
         fraction=i/79
@@ -310,7 +394,10 @@ def draw_splash(canvas,width,height):
         canvas.create_text(*point(400,y),text=text,fill=color,font=('DejaVu Sans',max(9,int(size*u))))
 
 
+# All window state and drawing/touch behavior for one round FishFinder screen.
 class Display:
+    # Construct the window and touch bindings, load settings/data paths, prepare queues/map
+    # state, then start the repeating update.
     def __init__(self, root, args):
         self.root, self.args = root, args
         root.title('FishFinder Traffic')
@@ -326,11 +413,17 @@ class Display:
         root.bind('<Escape>',lambda event:self.close())
         root.bind('f',lambda event:root.attributes('-fullscreen',not root.attributes('-fullscreen')))
         root.protocol('WM_DELETE_WINDOW',self.close)
+        # Create a stop signal and a one-slot handoff queue. Keeping only one snapshot favors
+        # current state over a backlog of already-outdated pictures.
         self.stop=threading.Event(); self.out=queue.Queue(maxsize=1)
         self.snapshot=Snapshot({},[])
+        # Load validated settings once for this window. self.config holds the choices;
+        # self.radius_nm and similar fields hold the currently applied display state.
         self.config=settings.load()
         try:self.version=json.loads((Path(__file__).resolve().parent/'VERSION.json').read_text())['version']
         except (OSError,ValueError,KeyError):self.version='unknown'
+        # Check permissions under the real current user. Report trouble in Setup; do not make
+        # everything world-writable or silently change ownership.
         from fs_checks import write_problem
         self.permission_issues=[issue for issue in (write_problem(settings.SETTINGS_PATH,atomic=True),write_problem(args.airports,atomic=True)) if issue]
         self.radius_nm=args.range if args.range is not None else self.config['default_range']
@@ -372,17 +465,23 @@ class Display:
         self.ground_image=None;self.ground_image_state=None;self.ground_seen=None;self.ground_image_time=0.0
         self.ground_request_key=None
         self.ground_labels=()
+        # The --demo database mode still uses the normal reader. main() adjusts the
+        # legacy/sample-demo flags before constructing Display; the fixed snapshot path is
+        # separate from a live collector database.
         if not args.demo:
             self.worker=threading.Thread(target=reader,args=(self.stop,self.out,args.db),daemon=True,name='database-reader')
             self.worker.start()
         self.splash_until=time.monotonic()+getattr(args,"splash_seconds",0)
         self.tick()
 
+    # Signal workers to stop, close the map renderer and destroy the window. Closing the
+    # display does not stop the separate collector service.
     def close(self):
         self.stop.set()
         if self.ground:self.ground.close()
         self.root.destroy()
 
+    # Draw text at logical 800-by-800 coordinates, scaled for the actual screen size.
     def text(self,x,y,text,fill=WHITE,size=12,**kwargs):
         return self.canvas.create_text(self.cx+(x-400)*self.unit,self.cy+(y-400)*self.unit,
             text=text,fill=fill,font=('DejaVu Sans',max(9,int(size*self.unit))),**kwargs)
@@ -408,10 +507,14 @@ class Display:
                     text=char,fill=MUTED,font=font,angle=90-math.degrees(phi),tags='map-attribution')
             progress+=width
 
+    # Draw a rectangle using logical coordinates instead of repeating screen-scaling
+    # arithmetic everywhere.
     def rect(self,x1,y1,x2,y2,**kwargs):
         return self.canvas.create_rectangle(self.cx+(x1-400)*self.unit,self.cy+(y1-400)*self.unit,
             self.cx+(x2-400)*self.unit,self.cy+(y2-400)*self.unit,**kwargs)
 
+    # Rotate a local east/north segment, clip it to the circular scope, then draw it in
+    # screen pixels.
     def line(self,a,b,color,**kwargs):
         a,b=rotate(a,self.map_heading),rotate(b,self.map_heading)
         clipped=clip_segment(a,b,self.radius_nm)
@@ -424,6 +527,8 @@ class Display:
         """One Tk polyline per continuous style/run, rather than per report."""
         points=[rotate(p,self.map_heading) for p in points]
         batch=[];style=None
+        # Send one continuous batch of trail points to Tkinter. Fewer Canvas objects keep Pi
+        # redraws cheaper.
         def flush():
             if len(batch)<4:return
             screen=[]
@@ -444,6 +549,8 @@ class Display:
             batch.extend(b)
         flush()
 
+    # Receive the newest snapshot/update state, draw a frame, and ask Tkinter to call tick
+    # again later. This is not a blocking while loop.
     def tick(self):
         if self.airport_updates:
             result=self.airport_updates.poll()
@@ -468,11 +575,21 @@ class Display:
         if time.monotonic()<self.splash_until:
             draw_splash(self.canvas,self.canvas.winfo_width(),self.canvas.winfo_height())
         else:self.draw()
+        # Schedule the next update and return control to Tkinter. Returning is what allows
+        # queued touch/button events to run between frames.
         self.root.after(FRAME_MS,self.tick)
 
+    # Build one picture in layers: background, rings, airports/runways, ownship/traffic,
+    # labels, controls, popups and persistent attribution.
     def draw(self):
+        # Start a new Canvas frame. Drawing order is layering order: later items cover
+        # earlier ones. Map processing is elsewhere; this method should mainly issue bounded
+        # drawing commands.
         c=self.canvas;c.delete('all')
         w,h=c.winfo_width(),c.winfo_height()
+        # Design in an 800-by-800 coordinate system, then scale with unit. cx/cy are the
+        # actual center; pixels is how many physical pixels represent one nautical mile at
+        # the selected range.
         self.unit=max(0.1,min(w,h)/800); self.cx=w/2;self.cy=h/2
         radius=398*self.unit;self.pixels=radius/self.radius_nm
         self.hits=[]; self.buttons=[];self.label_boxes=[];now=time.time()
@@ -480,8 +597,13 @@ class Display:
         self.idle=bool(self.config['idle_seconds'] and time.monotonic()-self.last_touch>=self.config['idle_seconds'] and
                        not (self.exit_pending or self.setup_panel))
         snap=self.snapshot
+        # Limit the usable trail and choose an ownship source before drawing. Matching
+        # ownship traffic is removed from the ordinary target list so the same aircraft is
+        # not shown twice.
         histories=active_histories(snap.reports,now)
         histories,own,self.own_source=select_ownship(snap,histories,self.config,now)
+        # Do not keep calling a stale last-known position a current ownship fix. Without a
+        # usable fix, choose a reference center and make uncertainty visible.
         fix=own[-1] if own and now-own[-1].time<=OWN_AGE and not snap.error else None
         if fix:
             origin=(fix.lat,fix.lon);self.last_own=origin
@@ -507,9 +629,15 @@ class Display:
         self.map_heading=own_heading if self.config['orientation']=='track-up' and own_heading is not None else 0.0
         if fix:mode=self.own_source+' · '+('TRACK UP' if self.config['orientation']=='track-up' and own_heading is not None else 'NORTH UP')
         if self.ground:self.ground.poll()
+        # A bundled local demo map is not a worldwide chart. Decide whether this map source
+        # applies before drawing it; the separate worldwide archive is handled as global
+        # coverage.
         ground_allowed=snap.demo or bool(snap.receiver and snap.receiver[2].startswith("DEMO:")) or self.ground_global
         if ground_allowed and self.ground_level and self.ground is None:
             self.ground=demo_ground.GroundLayer(self.ground_path)
+        # Town names are placed after traffic and airports have claimed label space. Their
+        # font grows with zoom, but town text yields when it would overlap a more important
+        # label.
         if origin and ground_allowed and self.ground and self.ground_level:
             self.draw_ground(origin)
         for fraction in (0.25,0.5,0.75,1):
@@ -526,6 +654,8 @@ class Display:
         self.airport_track=None if ov is None or math.hypot(*ov)<1e-10 or not fix or fix.speed<5 else math.degrees(math.atan2(ov[0],ov[1]))%360
         self.airport_hits=[]
         if origin and self.airports_visible:
+            # Look beyond the screen by roughly an extension length. A runway just off-screen
+            # may still have a 3 NM centerline extension entering the visible circle.
             extension_margin=3.2 if self.config['runway_extensions'] else .2
             key=(round(origin[0],3),round(origin[1],3),self.radius_nm,extension_margin)
             query_now=time.monotonic()
@@ -537,10 +667,16 @@ class Display:
                 pos=rotate(xy(airport['lat'],airport['lon'],origin),self.map_heading)
                 if self.config['runway_extensions']:
                     offset=xy(airport['lat'],airport['lon'],origin)
+                    # Runway endpoints are relative to their airport, while the display uses
+                    # offsets relative to ownship/reference. Add the airport offset before
+                    # extending. Reject schematic/closed strips.
                     for runway,a,b,schematic in runway_segments(airport,xy):
                         if schematic or runway.get('closed')=='1':continue
                         length=math.dist(a,b)
                         if length<1e-5:continue
+                        # Normalize the runway direction to length one. Multiplying it by 3
+                        # then means exactly three nautical miles, regardless of the runway's
+                        # length or screen zoom.
                         v=((b[0]-a[0])/length,(b[1]-a[1])/length)
                         aa=(offset[0]+a[0],offset[1]+a[1]);bb=(offset[0]+b[0],offset[1]+b[1])
                         self.line((aa[0]-3*v[0],aa[1]-3*v[1]),aa,'#687578',width=1,dash=(4,5),tags='runway-extension')
@@ -551,6 +687,9 @@ class Display:
                 c.create_rectangle(x-sz,y-sz,x+sz,y+sz,outline=airport_color(airport),fill=airport_color(airport),width=2)
                 self.airport_hits.append((x,y,airport['ident']))
             # Labels nearest first, with collision avoidance and circular clipping.
+            # Reserve space for higher-priority symbols/labels. Each box is left, top, right,
+            # bottom in pixels. Collision checks keep airport/town names from being painted
+            # on top of reserved content.
             boxes=[(self.cx-20*self.unit,self.cy-20*self.unit,self.cx+20*self.unit,self.cy+20*self.unit)] if fix else []
             # Reserve the existing traffic symbol and label areas before airport labels.
             for tail,history in histories.items():
@@ -593,7 +732,12 @@ class Display:
                     'twin':[(-2,16),(2,16),(3,4),(17,0),(17,-4),(3,-3),(2,-11),
                             (8,-13),(8,-16),(1,-14),(0,-17),(-1,-14),(-8,-16),
                             (-8,-13),(-2,-11),(-3,-3),(-17,-4),(-17,0),(-3,4)]}
+                # Choose an original vector airplane outline. Rotate the artwork by ground
+                # course relative to map orientation; no external copyrighted aircraft image
+                # is loaded.
                 style=self.config['ownship_symbol'];outline=shapes[style]
+                # Rotate the original ownship airplane outline and convert its points into
+                # screen pixels.
                 def aircraft_points(points):
                     return [n for x,y in (rotate(p,-angle) for p in points)
                             for n in (self.cx+x*self.unit,self.cy-y*self.unit)]
@@ -608,6 +752,9 @@ class Display:
             else:
                 c.create_oval(self.cx-5*self.unit,self.cy-5*self.unit,self.cx+5*self.unit,self.cy+5*self.unit,outline=MUTED)
                 if not self.idle: self.text(400,420,'REFERENCE',fill=MUTED,size=9)
+            # For each active aircraft: use its latest position, infer recent movement,
+            # decide uncertainty/color, then draw its past trail and straight projected
+            # track.
             for tail,history in histories.items():
                 p=history[-1];pos=xy(p.lat,p.lon,origin);tv=velocity(history);age=max(0,now-p.time)
                 if fix:
@@ -643,6 +790,9 @@ class Display:
                 sz=7*self.unit
                 blink=color==RED and int(now*2)%2==0
                 c.create_polygon(x,y-sz,x+sz,y,x,y+sz,x-sz,y,fill=BG if separated else WHITE if blink else color,outline=color,width=2)
+                # Readable registration/callsign comes from the identity table, not the
+                # internal ICAO key. EST and OLD tell the user why smoothly moving data may
+                # still be uncertain.
                 label=(snap.labels or {}).get(tail,tail)+(' · EST' if p.estimated else '')+(' · OLD' if age>10 else '')
                 # Keep the label inside the scope even near its perimeter.
                 side=-1 if screen_pos[0]>=0 else 1
@@ -650,6 +800,8 @@ class Display:
                     fill=color,font=('DejaVu Sans',max(9,int(10*self.unit*self.label_factor))),tags='map-label')
                 self.hits.append((x,y,tail))
         if origin and ground_allowed and self.ground and self.ground_level:self.draw_town_labels(origin)
+        # Remember where the control overlay starts. Idle mode can remove buttons/general
+        # text while preserving aircraft labels, airport labels and range-ring distances.
         overlay_start=len(c.find_all())
         self.rect(215,50,585,131,fill=BG,outline='')
         self.text(400,68,'FISHFINDER'+(' · DEMO' if snap.demo or (snap.receiver and snap.receiver[2].startswith('DEMO:')) else ''),size=17)
@@ -707,6 +859,9 @@ class Display:
             if notice:self.text(400,585,notice,fill=MUTED,size=9)
         if self.permission_issues:
             self.text(400,620,'Write access needs attention · see Setup',fill=YELLOW,size=10,width=330*self.unit)
+        # Popups are drawn above the scope. A reserved ownship selection opens ownship
+        # details; an ordinary key opens a traffic target. The crowded-target chooser has its
+        # own stable list.
         if self.selected:
             self.ownship_details(fix,own,now) if self.selected=='__ownship__' else self.details(infos.get(self.selected))
         if self.airport_selected:
@@ -730,14 +885,19 @@ class Display:
             self.rect(410,435,555,485,fill='#3b181b',outline=RED,width=2)
             self.text(482,460,'Exit',size=14)
 
+    # Cycle map brightness/off state and redraw without changing the traffic data.
     def cycle_ground(self):
         self.ground_level=(self.ground_level+1)%3
         self.config["ground_map"]=bool(self.ground_level)
         self.draw()
 
+    # Ask the background renderer for the view, accept only compatible results, and draw its
+    # cached image while it remains fresh.
     def draw_ground(self,origin):
         self.ground.poll()
         size=max(64,min(512,round(398*self.unit)))
+        # The map image's identity includes range, brightness and raster size. A result from
+        # the previous zoom cannot be reused as though it represented this new zoom.
         key=(self.radius_nm,self.ground_level,size)
         state=(origin,self.map_heading,self.radius_nm,self.ground_level,size)
         now=time.monotonic()
@@ -748,6 +908,9 @@ class Display:
         if result is not None and result is not self.ground_seen:
             result_state,ppm=result[:2]
             # Discard outdated zoom/brightness results instead of showing a wrong scale.
+            # Accept a completed image only if its non-position view parameters still match.
+            # Origin/heading may lag briefly between background renders; age is also bounded
+            # before the image is shown.
             if result_state[2:]==state[2:]:
                 try:
                     image=tk.PhotoImage(data=ppm,format='PPM').zoom(2,2)
@@ -760,6 +923,8 @@ class Display:
             # One image item per traffic frame; no map paths or pixel work in Tk.
             self.canvas.create_image(self.cx,self.cy,image=self.ground_image)
 
+    # Place town names after traffic/airport labels have reserved space. Skip colliding names
+    # rather than hiding higher-priority targets.
     def draw_town_labels(self,origin):
         if self.ground_image is None or time.monotonic()-self.ground_image_time>3:return
         occupied=list(self.label_boxes)
@@ -785,9 +950,12 @@ class Display:
             occupied.append(box);count+=1
             if count>=12:break
 
+    # Toggle airport overlays and redraw. The loaded reference catalog remains available.
     def toggle_airports(self):
         self.airports_visible=not self.airports_visible;self.draw()
 
+    # Dispatch a button action from the airport page: close, switch strip, switch page, or
+    # move through reference data.
     def airport_action(self,action):
         if action=='close': self.airport_selected=None
         elif action.startswith('runway:'): self.airport_runway_index=int(action.split(':')[1])
@@ -796,16 +964,20 @@ class Display:
         elif action=='prev': self.airport_page=max(0,self.airport_page-1)
         self.draw()
 
+    # Delegate the selected airport reference page to airport_reference.py.
     def airport_details(self):
         from airport_reference import draw
         draw(self,self.catalog.airports[self.airport_selected])
 
+    # Draw a touch button and register its clickable rectangle only when enabled.
     def airport_button(self,x1,y1,x2,y2,label,action,enabled=True):
         self.rect(x1,y1,x2,y2,fill='#10253d' if enabled else '#111b24',outline=BLUE if enabled else '#35434f')
         self.text((x1+x2)/2,(y1+y2)/2,label,size=11,fill=WHITE if enabled else '#63717c')
         if enabled:
             self.airport_buttons.append((x1,y1,x2,y2,action))
 
+    # Draw the older runway-layout view using airport-relative geometry and a scale fitted to
+    # its content.
     def draw_runways(self,a):
         track=self.airport_track or 0
         self.text(400,296,f'TRACK UP · {track:.0f}° true' if self.airport_track is not None else 'NORTH UP · track unavailable',fill=BLUE,size=11)
@@ -818,6 +990,8 @@ class Display:
         points=[p for _,a,b,_ in rotated for p in (a,b)]
         mid=((min(p[0] for p in points)+max(p[0] for p in points))/2,(min(p[1] for p in points)+max(p[1] for p in points))/2)
         scale=min(300/max(0.01,max(p[0] for p in points)-min(p[0] for p in points)),150/max(0.01,max(p[1] for p in points)-min(p[1] for p in points)))
+        # Convert runway-layout east/north coordinates into the drawing area for this
+        # particular diagram.
         def screen(p): return 400+(p[0]-mid[0])*scale,405-(p[1]-mid[1])*scale
         label_boxes=[]
         for r,p,q,schematic in rotated:
@@ -842,16 +1016,22 @@ class Display:
         if any(v[0].get('_aligned') for v in rotated): note='Parallel layout uses published true heading · schematic'
         self.text(400,501,note,fill=YELLOW if any(v[3] for v in rotated) else MUTED,size=9,width=415*self.unit)
 
+    # Show a confirmation panel instead of immediately destroying the display on a single
+    # accidental touch.
     def request_exit(self):
         self.exit_pending=True
         self.draw()
 
+    # Select the radius in nautical miles and redraw at the new scale.
     def set_range(self,value):
         self.radius_nm=value;self.draw()
 
+    # Forget an old fallback anchor so the next frame can choose a current reference center.
     def recenter(self):
         self.anchor=None;self.last_own=None;self.draw()
 
+    # Show our own altitude, speed, inferred true ground course, source and age; explicitly
+    # report a fix that has become stale.
     def ownship_details(self,fix,history,now):
         self.rect(176,209,624,614,fill='#071710',outline=WHITE,width=2)
         self.text(400,241,'Ownship',size=22)
@@ -870,6 +1050,8 @@ class Display:
         self.rect(322,571,478,602,fill='#183b2d',outline=GREEN)
         self.text(400,587,'Close',size=12)
 
+    # Show information for the selected traffic target, including data age and the reason for
+    # its current proximity color.
     def details(self,info):
         self.rect(176,209,624,614,fill='#071710',outline=WHITE,width=2)
         title=(self.snapshot.labels or {}).get(self.selected,self.selected)
@@ -893,11 +1075,15 @@ class Display:
         self.rect(322,571,478,602,fill='#183b2d',outline=GREEN)
         self.text(400,587,'Close',size=12)
 
+    # Check write permissions again and open the settings panel with actionable status
+    # messages.
     def open_setup(self):
         from fs_checks import write_problem
         self.permission_issues=[issue for issue in (write_problem(settings.SETTINGS_PATH,atomic=True),write_problem(self.args.airports,atomic=True)) if issue]
         self.setup_panel=setup_screen.Setup(self)
 
+    # Validate/save user choices, update active display options, and reset cached map state
+    # when necessary.
     def apply_settings(self,values):
         previous_map=self.config['ground_map']
         self.config=settings.save(values)
@@ -912,6 +1098,8 @@ class Display:
         self.projection_seconds=self.config['horizon_minutes']*60; TRAIL_AGE=self.config['trail_seconds']
         self.last_touch=time.monotonic(); self.draw()
 
+    # Optionally log raw and logical touch coordinates to diagnose mapping issues on the Pi
+    # screen.
     def trace_touch(self,event):
         if not self.touch_debug:return
         self.touch_mark=(event.x,event.y,time.monotonic())
@@ -925,6 +1113,8 @@ class Display:
               f"idle={self.idle} buttons={len(self.buttons)} match={','.join(matches) or '-'} "
               f"exit={self.exit_pending} target={self.selected} airport={self.airport_selected}",flush=True)
 
+    # Decide whether this touch is an immediate button action or might be part of a double
+    # tap. Capture target positions before the brief delay.
     def tap(self,event):
         self.trace_touch(event)
         now=time.monotonic()
@@ -939,6 +1129,8 @@ class Display:
                 for x1,y1,x2,y2,_ in self.airport_buttons)) or
             (not popup and any(x1<=x<=x2 and y1<=y<=y2
                 for x1,y1,x2,y2,_ in self.buttons)))
+        # A single finger tap waits briefly because a second nearby tap could be the wake-
+        # controls gesture. Visible control buttons bypass that delay so they feel immediate.
         pending=getattr(self,'pending_tap',None)
         if immediate:
             if pending:self.root.after_cancel(pending[0]);self.pending_tap=None
@@ -949,13 +1141,19 @@ class Display:
                 self.last_touch=now;self.selected=None;self.airport_selected=None;self.target_choices=[]
                 self.draw();return
         # Capture hit positions now: moving targets may shift during the delay.
+        # Freeze candidate positions at touch time. Aircraft may move before the delayed
+        # callback runs; use what the user touched, not where the symbol moved afterward.
         hits=tuple(self.hits);airports=tuple(self.airport_hits)
+        # Complete a pending single tap using the hit positions captured when the finger
+        # landed, not newer moving-target positions.
         def finish():
             self.pending_tap=None
             self.single_tap(event,hits,airports)
         token=self.root.after(300,finish)
         self.pending_tap=(token,now,event)
 
+    # Handle confirmed single touches: popups first, then visible controls, then nearby
+    # objects. Several objects open a chooser.
     def single_tap(self,event,hits=None,airport_hits=None):
         if time.monotonic()<self.splash_until:
             self.splash_until=0;self.last_touch=time.monotonic();self.draw();return
@@ -992,16 +1190,22 @@ class Display:
                 action();return
         hits=self.hits if hits is None else hits
         airport_hits=self.airport_hits if airport_hits is None else airport_hits
+        # Consider both airports and aircraft inside the touch radius. Do not always prefer
+        # aircraft: at wide range a finger may cover an airport plus several pattern
+        # aircraft.
         candidates=[]
         for kind,items in [('aircraft',hits),('airport',airport_hits)]:
             for hx,hy,ident in items:
                 distance=math.hypot(event.x-hx,event.y-hy)
                 if distance<=28*self.unit:candidates.append((distance,kind,ident))
+        # Sort by touch distance once. If there is more than one candidate, show large
+        # selectable rows; retain this order while the live display continues updating.
         candidates.sort(key=lambda item:item[0])
         if len(candidates)>1:
             self.target_choices=candidates;self.choice_page=0;self.draw()
         elif candidates:self.select_target(candidates[0])
 
+    # Open the chosen aircraft or airport and close the intermediate target list.
     def select_target(self,target):
         _,kind,ident=target
         self.target_choices=[]
@@ -1009,6 +1213,8 @@ class Display:
         else:self.airport_selected=ident;self.airport_runway_index=None;self.airport_page=0;self.airport_runways=False
         self.draw()
 
+    # Draw a stable, paged list of large target buttons so crowded icons do not require
+    # precise fingers.
     def draw_target_choices(self):
         # Four large rows per page keep every choice inside the round display.
         self.rect(185,180,615,625,fill='#071710',outline=WHITE,width=2)
@@ -1041,6 +1247,8 @@ class Display:
         self.text(400,610,f'Page {self.choice_page+1} of {pages}',fill=MUTED,size=10)
 
 
+# Parse display/database/geometry options, create the Tk window, and hand control to
+# Tkinter's event loop.
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--db',default='/var/local/FishFinder/flying_objects.db')
@@ -1065,6 +1273,9 @@ def main():
     if args.demo and args.db=='/var/local/FishFinder/flying_objects.db':
         args.db='/var/local/FishFinder/demo_objects.db'
     # Internally this flag remains the legacy sample renderer.
+    # User-facing --demo means 'read the separate moving-demo database'. The
+    # older internal args.demo field instead means 'make fixed sample objects'.
+    # Keep this translation here so the rest of Display sees the legacy meaning.
     args.demo=args.sample_demo
     import signal
     root=tk.Tk();display=Display(root,args)
@@ -1072,5 +1283,6 @@ def main():
     root.mainloop()
 
 
+# Enter the event loop only when launched, not when imported by tests/tools.
 if __name__=='__main__':
     main()

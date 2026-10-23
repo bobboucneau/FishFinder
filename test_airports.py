@@ -1,3 +1,9 @@
+# READING THE TESTS: this file checks behavior without requiring a flight.
+# An assert... call states what must be true; a failed assertion means the
+# observed result differs from the expected one. Mock/patch objects temporarily
+# replace a dependency, so tests can exercise errors without changing hardware.
+# These checks on a Mac do not replace touchscreen/GPS validation on the Pi.
+
 import argparse
 from datetime import date
 import json
@@ -50,6 +56,7 @@ def gui(no_ownship=False,path='airports.json'):
 
 
 class Tests(unittest.TestCase):
+    # Check: ownship tap and stale details.
     def test_ownship_tap_and_stale_details(self):
         d=gui();d.hits=[(400,400,'__ownship__')];d.airport_hits=[]
         d.tap(SimpleNamespace(x=400,y=400));d.root.fire(d.pending_tap[0])
@@ -64,6 +71,7 @@ class Tests(unittest.TestCase):
         missing=gui(True)
         self.assertFalse(any(h[2]=='__ownship__' for h in missing.hits))
 
+    # Check: target choice paging cancel and airport selection.
     def test_target_choice_paging_cancel_and_airport_selection(self):
         d=gui();d.last_touch=time.monotonic()-20;d.draw()
         d.hits=[(400,400,f'test{i}') for i in range(6)]
@@ -81,6 +89,7 @@ class Tests(unittest.TestCase):
         d.single_tap(SimpleNamespace(x=400,y=400),[(400,400,'test0')],[])
         self.assertEqual(d.selected,'test0')
 
+    # Check: main airport tower colors.
     def test_main_airport_tower_colors(self):
         self.assertEqual(ad.airport_color({'reference':{'tower':'non-towered'}}),'#f075d5')
         self.assertEqual(ad.airport_color({'reference':{'tower':'towered'}}),'#48baff')
@@ -91,12 +100,14 @@ class Tests(unittest.TestCase):
         self.assertTrue(symbols)
         self.assertTrue(any(abs(coords[2]-coords[0]-14*d.unit)<.01 for coords,_ in symbols))
 
+    # Check: freshness.
     def test_freshness(self):
         self.assertFalse(ad.freshness_label('2026-10-06',date(2026,10,6))[1])
         self.assertTrue(ad.freshness_label('2026-10-06',date(2026,11,7))[1])
         self.assertTrue(ad.freshness_label('2026-10-06',date(2026,10,5))[1])
         self.assertTrue(ad.freshness_label('bad')[1])
 
+    # Check: import filter and join.
     def test_import_filter_and_join(self):
         row=dict(ident='TEST',type='small_airport',name='Test',latitude_deg='0',longitude_deg='0',iso_country='US')
         data=updater.build([row,dict(row,ident='CLOSED',type='closed_airport'),dict(row,ident='BAD',latitude_deg='nan')],
@@ -106,6 +117,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(data['airports'][0]['frequencies'][0]['frequency_mhz'],'123.0')
         with self.assertRaises(ValueError):updater.build([row],[],[],['CA'])
 
+    # Check: catalog and wrapping.
     def test_catalog_and_wrapping(self):
         with tempfile.TemporaryDirectory() as tmp:
             p=Path(tmp)/'data.json'
@@ -117,6 +129,7 @@ class Tests(unittest.TestCase):
             self.assertTrue(ad.AirportCatalog(Path(tmp)/'missing').error)
             p.write_text('{');self.assertTrue(ad.AirportCatalog(p).error)
 
+    # Check: geometry rotation and missing.
     def test_geometry_rotation_and_missing(self):
         self.assertAlmostEqual(ad.rotate((1,0),90)[1],1)
         self.assertAlmostEqual(ad.rotate((0,1),90)[0],-1)
@@ -130,6 +143,7 @@ class Tests(unittest.TestCase):
         base['runways']=[dict(length_ft='1000')]
         self.assertEqual(ad.runway_segments(base,display.xy),[])
 
+    # Check: real cache touch and views.
     def test_real_cache_touch_and_views(self):
         d=gui();self.assertFalse(d.catalog.error)
         self.assertTrue(d.airport_hits)
@@ -151,6 +165,7 @@ class Tests(unittest.TestCase):
         d.airport_selected='KSJC';d.airport_runways=False;d.airport_page=100;d.airport_details()
         self.assertLess(d.airport_page,100)
 
+    # Check: no fix and stationary and no cache.
     def test_no_fix_and_stationary_and_no_cache(self):
         d=gui(True);self.assertIsNone(d.airport_track)
         d.airport_selected='KCPU';d.airport_runways=False;d.draw()
@@ -163,6 +178,7 @@ class Tests(unittest.TestCase):
         d.snapshot=display.Snapshot({},[display.Point(1,now,37.3,-121.9,0,100)])
         d.draw();self.assertIsNone(d.airport_track)
 
+    # Check: updater failure preserves existing.
     def test_updater_failure_preserves_existing(self):
         with tempfile.TemporaryDirectory() as tmp:
             target=Path(tmp)/'airports.json';target.write_text('baseline')

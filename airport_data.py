@@ -1,4 +1,14 @@
 """Offline OurAirports cache, spatial lookup and runway geometry."""
+
+# READING THIS FILE: load and search the offline airport catalog.
+#
+# The JSON file is a snapshot, not a live airport service. Airports are grouped
+# into latitude bands so a nearby search need not scan the entire world.
+# Runway coordinates are returned as east/north offsets, in nautical miles,
+# relative to the airport. A schematic fallback is flagged: a plausible heading
+# without known endpoint locations must not become an operational centerline.
+# Tower color indicates published tower status, not whether the tower is open.
+
 import json
 from datetime import date, datetime, timezone
 import math
@@ -17,6 +27,7 @@ def airport_color(a):
     return '#9aafaa'  # Unknown status stays neutral.
 
 
+# Convert optional catalog text to a finite number, returning None when unavailable.
 def number(value):
     try:
         n = float(value)
@@ -25,12 +36,16 @@ def number(value):
         return None
 
 
+# Validate the latitude/longitude pair together before using it for drawing or searching.
 def coordinates(lat, lon):
     a, b = number(lat), number(lon)
     return (a, b) if a is not None and b is not None and -90 <= a <= 90 and -180 <= b <= 180 else None
 
 
+# An in-memory airport lookup plus latitude bands for quicker nearby searches.
 class AirportCatalog:
+    # Load and validate the file, normalize useful airport fields, and build the
+    # lookup/search bands. Keep a readable error if loading fails.
     def __init__(self, path):
         self.error = ''; self.date = 'unavailable'; self.bands = {}; self.airports = {}
         try:
@@ -51,6 +66,8 @@ class AirportCatalog:
             self.error = f'Airport data unavailable: {exc}'
             self.airports = {}; self.bands = {}
 
+    # Search the relevant latitude bands, calculate actual distance, and return nearby
+    # airports ordered by proximity.
     def nearby(self, origin, radius, xy):
         if origin is None:
             return []

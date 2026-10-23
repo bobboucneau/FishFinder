@@ -4,6 +4,22 @@ Reads our filtered layers, not arbitrary cartographic styles. PMTiles indexing
 is provided by the bundled BSD-licensed upstream reader. MVT follows Mapbox's
 public 2.1 specification (protobuf fields and delta geometry commands).
 """
+
+# READING THIS FILE: the richer offline PMTiles map reader.
+#
+# The upstream PMTiles reader locates compressed tiles inside the archive.
+# Our own bounded decoder then reads vector-tile fields and turns compact
+# integer drawing commands into coordinates. This avoids requiring a large GIS
+# software stack on the Pi. The build tools and the Pi runtime have different
+# dependency needs: this runtime uses the Python standard library plus the
+# bundled reader, whose original license lives in vendor_pmtiles/.
+#
+# A tile is a small square part of a zoom level. Its integers are not latitude
+# or longitude until converted. 'varint' means a variable-length integer;
+# protobuf field tags identify what each piece of the binary message contains.
+# Malformed or oversized input raises an exception rather than consuming
+# unbounded memory or pretending to contain valid landmarks.
+
 from functools import lru_cache
 import math
 from pathlib import Path
@@ -14,6 +30,8 @@ from vendor_pmtiles.tile import TileType,Compression
 DEFAULT_RICH_PATH=Path('/var/local/FishFinder/world_landmarks.pmtiles')
 MAX_BYTES=8_000_000
 
+# Decode binary integers stored seven useful bits at a time; stop on malformed or overlong
+# encodings.
 def varints(data):
     result=shift=0
     for byte in data:
@@ -24,8 +42,11 @@ def varints(data):
             if shift>63:raise ValueError('Oversized map integer')
     if shift:raise ValueError('Truncated map integer')
 
+# Walk a protobuf message, yielding field numbers and raw values while checking lengths and
+# wire types.
 def fields(data):
     offset=0
+    # Read one integer from the current binary offset and advance that shared offset.
     def number():
         nonlocal offset
         value=shift=0
@@ -46,6 +67,8 @@ def fields(data):
             yield key,data[offset:end];offset=end
         else:raise ValueError('Unsupported map field')
 
+# Interpret move/line/close commands, accumulate coordinate changes, and enforce a geometry
+# budget.
 def geometry(commands,feature_type):
     values=iter(varints(commands) if isinstance(commands,(bytes,bytearray)) else commands);x=y=0;parts=[];part=[];count=0
     for command in values:
@@ -70,6 +93,7 @@ def geometry(commands,feature_type):
     if part:parts.append(part)
     return parts
 
+# Decompress and decode a bounded tile into landmark paths, water polygons and town labels.
 def decode_tile(raw,z,x,y):
     unzip=zlib.decompressobj(16+zlib.MAX_WBITS)
     data=unzip.decompress(raw,MAX_BYTES+1)
@@ -86,6 +110,8 @@ def decode_tile(raw,z,x,y):
             elif key==5:extent=value
         if name not in ('ground_water','ground_urban','ground_river','ground_road','ground_rail','ground_place'):continue
         if not(256<=extent<=65536):raise ValueError('Invalid map extent')
+        # Convert a tile-local point into latitude/longitude at this tile coordinate and
+        # zoom.
         def position(p):
             lon=(x+p[0]/extent)/(1<<z)*360-180
             lat=math.degrees(math.atan(math.sinh(math.pi*(1-2*(y+p[1]/extent)/(1<<z)))))
@@ -122,10 +148,13 @@ def decode_tile(raw,z,x,y):
                         labels.extend((*position(p),title) for p in part)
     return paths,polygons,labels,total
 
+# A bounded read-only map interface backed by the PMTiles archive and a small tile cache.
 class TileMap:
+    # Open the archive, check its metadata/format, and prepare a cached tile reader.
     def __init__(self,path):
         self.file=Path(path).open('rb');self.labels=[]
         self.size=Path(path).stat().st_size
+        # Read exactly the requested archive byte range without loading the entire file.
         def read(offset,length):
             if offset<0 or length<0 or offset+length>self.size or length>MAX_BYTES:raise ValueError('Invalid map read')
             self.file.seek(offset);data=self.file.read(length)
@@ -141,16 +170,22 @@ class TileMap:
             self.bounds=[h['min_lat_e7']/1e7,h['min_lon_e7']/1e7,h['max_lat_e7']/1e7,h['max_lon_e7']/1e7]
             self.tile=lru_cache(maxsize=128)(self._tile)
         except Exception:self.file.close();raise
+    # Fetch and decode a single tile, allowing repeated nearby queries to reuse it.
     def _tile(self,z,x,y):
         raw=self.reader.get(z,x,y)
         if not raw:return [],[],[],0
         paths,polygons,labels,count=decode_tile(raw,z,x,y)
+        # Find the enclosing latitude/longitude rectangle of decoded feature points.
+        # Cache it so later queries can quickly skip features outside the view.
         def bounds(points):
             return min(p[0] for p in points),min(p[1] for p in points),max(p[0] for p in points),max(p[1] for p in points)
         return ([(kind,points,bounds(points)) for kind,points in paths],
                 [(polygon,bounds([p for r in polygon['rings'] for p in r])) for polygon in polygons],labels,count)
+    # Release the file handle used to read the archive.
     def close(self):
         self.tile.cache_clear();self.read.cache_clear();self.file.close()
+    # Choose the appropriate detail level and nearby tiles, then gather visible paths, water
+    # and labels within limits.
     def query(self,origin,radius):
         from world_ground import query_bounds
         south,north,ranges=query_bounds(origin,radius)
@@ -158,6 +193,7 @@ class TileMap:
             self.labels=[];return [],[]
         target=13 if radius<=5 else 11 if radius<=10 else 9
         z=min(self.zooms,key=lambda value:abs(value-target));n=1<<z
+        # Convert latitude into the vertical tile-row coordinate for this zoom.
         def row(lat):
             lat=max(-85.0511287,min(85.0511287,lat))
             return max(0,min(n-1,math.floor((1-math.asinh(math.tan(math.radians(lat)))/math.pi)/2*n)))
@@ -168,6 +204,7 @@ class TileMap:
                 for y in yy:tiles.add((z,x,y))
         if len(tiles)>1024:raise ValueError('Map view exceeds tile budget')
         paths=[];polygons=[];places={};total=0
+        # Check whether a feature or label belongs in the geographic view before adding it.
         def visible(bounds):
             low,west,high,east=bounds
             return low<=north and high>=south and any(west<=right and east>=left for left,right in ranges)

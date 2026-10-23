@@ -5,6 +5,15 @@ python3 build_demo_ground.py raw.json demo_ground.json
 Complete water boundaries are stitched and filled with even/odd island holes.
 Incomplete relations remain outline-only.
 """
+
+# READING THIS FILE: a build-time tool for the small local map experiment.
+#
+# This runs on the development computer, not on every display frame. It selects
+# landmark geometry, simplifies unnecessary intermediate points, and joins water
+# boundaries only when their real endpoints meet. Missing geometry must not be
+# bridged by an invented line that could falsely fill land as water.
+# The result is a small JSON pack used by the local demo renderer.
+
 import argparse
 import json
 import math
@@ -56,6 +65,7 @@ def join_rings(geometries):
     return rings
 
 
+# Assemble usable water rings while preserving holes and avoiding invented joins.
 def water_polygons(elements):
     polygons=[]
     members={m.get('ref') for e in elements if e['type']=='relation' and e.get('tags',{}).get('natural')=='water' for m in e.get('members',[]) if m.get('type')=='way'}
@@ -74,6 +84,7 @@ def water_polygons(elements):
         if extent>=.008:polygons.append(rings)
     return polygons
 
+# Read source features, select and simplify local landmarks, then write the demo map pack.
 def build(raw):
     if raw.get('remark'):raise ValueError(raw['remark'])
     paths=[];seen=set();original=0

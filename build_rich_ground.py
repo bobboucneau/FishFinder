@@ -5,6 +5,20 @@ Build dependencies: pmtiles==3.8.1 and mapbox-vector-tile>=2.2,<3 (protobuf).
 Usage: python build_rich_ground.py INPUT.pmtiles OUTPUT.pmtiles
 Default levels: z9 for 20 NM, z11 for 10 NM, z13 for 2/5 NM. No geometry conversion needed.
 """
+
+# READING THIS FILE: reduce a worldwide Protomaps archive for FishFinder.
+#
+# The source can be very large. Process it in bounded batches, keep only useful
+# landmark layers/zoom levels, simplify geometry, and reuse identical tile data.
+# Multiple worker processes do filtering, but results are written in source
+# order so the archive index stays valid. The source is never overwritten.
+#
+# A .building candidate is completed and checked before final installation.
+# Byte/vertex/file budgets are brakes, not image-quality settings. Water rings
+# need their orientation and exterior/hole relationships preserved. Removing a
+# lake's outer ring but retaining its holes would create incorrect filled areas.
+# This tool does not run in the Pi display or belong in the live frame loop.
+
 import argparse
 from functools import lru_cache
 from concurrent.futures import ProcessPoolExecutor
@@ -19,10 +33,15 @@ import time
 
 GROUPS=('ground_water','ground_river','ground_road','ground_rail','ground_urban','ground_place')
 
+# Reduce redundant tile geometry while preserving polygon winding, exterior rings and holes;
+# re-encode the compact commands.
 def simplify_geometry(values,typ,grid):
     from tile_ground import geometry
     parts=geometry(values,typ);encoded=[];cursor=(0,0);exterior_alive=False
+    # Calculate signed ring area; its sign tells us which side/winding the ring uses.
     def area(points):return sum(a[0]*b[1]-b[0]*a[1] for a,b in zip(points,points[1:]))
+    # Keep endpoints and enough intermediate points to stay within the requested
+    # simplification tolerance.
     def reduce(points):
         keep={0,len(points)-1};stack=[(0,len(points)-1)]
         while stack:
@@ -35,6 +54,8 @@ def simplify_geometry(values,typ,grid):
                 if distance>best:best=distance;index=j
             if index is not None:keep.add(index);stack.extend(((lo,index),(index,hi)))
         return [points[i] for i in sorted(keep)]
+    # Encode the change from the previous point, rather than repeating full coordinates for
+    # every point.
     def delta(point):
         nonlocal cursor
         a,b=point[0]-cursor[0],point[1]-cursor[1];cursor=point
@@ -58,6 +79,8 @@ def simplify_geometry(values,typ,grid):
         if typ==3:encoded.append(15)
     return encoded
 
+# Decode one source tile, keep the landmark classes FishFinder uses, and encode only those
+# layers into a new compressed tile.
 def filter_tile(raw,keep_minor=False,grid=1):
     from mapbox_vector_tile.Mapbox import vector_tile_pb2 as pb
     source=pb.tile();source.ParseFromString(gzip.decompress(raw))
@@ -108,9 +131,12 @@ def filter_tile(raw,keep_minor=False,grid=1):
         if not target.layers[i].features:del target.layers[i]
     return gzip.compress(target.SerializeToString(),compresslevel=6,mtime=0)
 
+# Reuse a previous filtering result when identical source data and detail choices recur.
 @lru_cache(maxsize=512)
 def cached_filter(raw,keep_minor,grid):return filter_tile(raw,keep_minor,grid)
 
+# Filter a bounded group of tiles, translating the meter tolerance into tile coordinate units
+# at each latitude.
 def filter_batch(rows,keep_minor,meters):
     from vendor_pmtiles.tile import tileid_to_zxy
     result=[]
@@ -122,22 +148,31 @@ def filter_batch(rows,keep_minor,meters):
         result.append((start,count,cached_filter(raw,keep_minor,grid)))
     return result
 
+# Run filtering in parallel but yield results in source order so the writer can build a valid
+# archive.
 def ordered_batches(batches,keep_minor,workers,meters):
     if workers==1:
         for batch in batches:yield filter_batch(batch,keep_minor,meters)
         return
     with ProcessPoolExecutor(max_workers=workers,mp_context=mp.get_context('spawn')) as pool:
+        # Bound the number of in-flight batches. Parallelism should use available CPU without
+        # queueing the whole source archive in RAM.
         pending=deque()
         for batch in batches:
             pending.append(pool.submit(filter_batch,batch,keep_minor,meters))
             if len(pending)>=workers*2:yield pending.popleft().result()
         while pending:yield pending.popleft().result()
 
+# Read the source archive, filter selected zooms, write a separate bounded candidate archive,
+# and finish its index/metadata.
 def build(source_path,output_path,zooms=(9,11,13),keep_minor=False,limit_gb=None,workers=4,meters=40):
     from pmtiles.reader import Reader,MmapSource
     from pmtiles.tile import deserialize_directory,Entry,zxy_to_tileid
     from pmtiles.writer import Writer
+    # A build-tool writer specialization for safely reusing identical tile-content runs.
     class SafeWriter(Writer):
+        # Store a run of tiles, reusing an existing byte block when its content hash already
+        # exists.
         def write_run(self,tileid,data,count):
             digest=hashlib.sha256(data).digest()
             if digest in self.hash_to_offset:
@@ -152,7 +187,11 @@ def build(source_path,output_path,zooms=(9,11,13),keep_minor=False,limit_gb=None
     if workers<1:raise ValueError('Workers must be positive')
     if source_path.resolve()==output_path.resolve():raise ValueError('Source and output must differ')
     repo=Path(__file__).resolve().parent
+    # The map archive can be gigabytes. Explicitly refuse output inside the source repository
+    # so it cannot accidentally become a large Git artifact.
     if output_path.resolve().is_relative_to(repo):raise ValueError('Keep map data outside Git')
+    # Write the candidate under a different name. If conversion fails, the source and any
+    # previous installed map remain untouched.
     temporary=output_path.with_suffix('.building')
     if temporary.exists():raise ValueError(f'Unfinished build: {temporary}')
     zooms=sorted(set(zooms))
@@ -165,11 +204,15 @@ def build(source_path,output_path,zooms=(9,11,13),keep_minor=False,limit_gb=None
         if header['max_zoom']<max(zooms):raise ValueError('Source lacks required detail')
         output_file=temporary.open('wb')
         writer=SafeWriter(output_file)
+        # Walk root/leaf index entries recursively until the selected zoom range is
+        # exhausted.
         def entries(offset,length):
             for entry in deserialize_directory(get(offset,length)):
                 if entry.tile_id>=last_id:break
                 if entry.run_length:yield entry
                 else:yield from entries(header['leaf_directory_offset']+entry.offset,entry.length)
+        # Group selected source entries into bounded chunks rather than loading the planet
+        # into memory.
         def batches():
             batch=[]
             for entry in entries(header['root_offset'],header['root_length']):
@@ -202,6 +245,8 @@ def build(source_path,output_path,zooms=(9,11,13),keep_minor=False,limit_gb=None
     output_path.with_suffix('.report.json').write_text(json.dumps(report,indent=2)+'\n')
     return report
 
+# Read build paths, zoom levels, worker count and detail/storage limits, then start the
+# offline conversion.
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('source',type=Path);p.add_argument('output',type=Path);p.add_argument('--zooms',type=int,nargs='+',default=[9,11,13]);p.add_argument('--minor-roads',action='store_true');p.add_argument('--limit-gb',type=float);p.add_argument('--workers',type=int,default=4);p.add_argument('--grid-meters',type=float,default=40,help='Approximate simplification grid; 0 preserves source geometry')
     a=p.parse_args()

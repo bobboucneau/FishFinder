@@ -1,3 +1,9 @@
+# READING THE TESTS: this file checks behavior without requiring a flight.
+# An assert... call states what must be true; a failed assertion means the
+# observed result differs from the expected one. Mock/patch objects temporarily
+# replace a dependency, so tests can exercise errors without changing hardware.
+# These checks on a Mac do not replace touchscreen/GPS validation on the Pi.
+
 import json
 import sqlite3
 import tempfile
@@ -19,6 +25,7 @@ class WorldTests(unittest.TestCase):
             conn.execute('INSERT INTO features VALUES(?,?,?)',(ident,'road',zlib.compress(json.dumps(points).encode())))
             conn.execute('INSERT INTO bounds VALUES(?,?,?,?,?)',(ident,west,east,0,0))
         conn.commit();conn.close()
+    # Check: index query local dateline pole and readonly.
     def test_index_query_local_dateline_pole_and_readonly(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'map.sqlite';self.fixture(path)
@@ -31,12 +38,14 @@ class WorldTests(unittest.TestCase):
                 with self.assertRaises(sqlite3.OperationalError):world.conn.execute('DELETE FROM features')
                 with self.assertRaises(ValueError):world.query((float('nan'),0),10)
             finally:world.close()
+    # Check: reject wrong schema and decompression bomb.
     def test_reject_wrong_schema_and_decompression_bomb(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'bad.sqlite';sqlite3.connect(path).close()
             with self.assertRaises(ValueError):WorldMap(path)
         with self.assertRaises(ValueError):decode(zlib.compress(b'0'*8_000_001))
         with self.assertRaises(ValueError):decode(b'broken')
+    # Check: world default local override and saved off preference.
     def test_world_default_local_override_and_saved_off_preference(self):
         import traffic_display as display
         import settings
@@ -53,6 +62,7 @@ class WorldTests(unittest.TestCase):
                 self.assertEqual(obj.ground_level,expected_level)
                 obj.stop.set()
 
+    # Check: world worker renders without gui dependencies.
     def test_world_worker_renders_without_gui_dependencies(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'map.sqlite';self.fixture(path)
@@ -68,6 +78,7 @@ class WorldTests(unittest.TestCase):
                 self.assertTrue(layer.covers((0,179.95),20))
             finally:layer.close()
 
+    # Check: three feature styles are distinct and rail is dashed.
     def test_three_feature_styles_are_distinct_and_rail_is_dashed(self):
         state=((0,0),0,10,1,100)
         colors=[]

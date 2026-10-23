@@ -4,6 +4,15 @@
 Build-only dependencies: pyshp>=2.3,<4 and shapely>=2,<3.
 The display needs neither package. Sources and output default to the Mac cache.
 """
+
+# READING THIS FILE: build the earlier compact global map archive.
+#
+# This offline development tool reads source shapefiles, selects/simplifies
+# landmarks, and writes compressed features plus a spatial index to SQLite.
+# That expensive conversion is done once; the Pi reads only a small local view.
+# Build-only geography packages are not installed as display runtime needs.
+# Keep generated map archives outside Git and retain their data-license terms.
+
 import argparse
 import collections
 import hashlib
@@ -27,6 +36,7 @@ SOURCES={
  'ocean':('10m_physical','ne_10m_ocean'),
 }
 
+# Create the compact map database and spatial index from selected source features.
 def build(source,output,tolerance=.002):
     import shapefile
     from shapely.geometry import shape,box
@@ -40,6 +50,8 @@ def build(source,output,tolerance=.002):
     conn=sqlite3.connect(temporary)
     try:
         conn.executescript(f'PRAGMA application_id={APPLICATION_ID}; CREATE TABLE metadata(key TEXT PRIMARY KEY,value TEXT); CREATE TABLE features(id INTEGER PRIMARY KEY,kind TEXT,geometry BLOB); CREATE VIRTUAL TABLE bounds USING rtree(id,west,east,south,north);')
+        # Compress one feature and record its bounds so later view queries can find it
+        # efficiently.
         def insert(kind,geometry):
             if kind=='water_fill':
                 coords=[list(geometry.exterior.coords)]+[list(r.coords) for r in geometry.interiors]
@@ -53,6 +65,8 @@ def build(source,output,tolerance=.002):
             west,south,east,north=geometry.bounds
             conn.execute('INSERT INTO bounds VALUES(?,?,?,?,?)',(ident,west,east,south,north))
             counts[kind]+=1;vertices[kind]+=n
+        # Iterate separate geometry pieces rather than drawing artificial lines between
+        # unrelated pieces.
         def parts(geometry,kind):
             if geometry.is_empty:return
             if geometry.geom_type in ('GeometryCollection','MultiPolygon','MultiLineString'):
@@ -104,6 +118,7 @@ def build(source,output,tolerance=.002):
     output.with_suffix('.report.json').write_text(json.dumps(result,indent=2)+'\n')
     return result
 
+# Parse source/output/detail options and invoke the offline map build.
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     default=Path.home()/('Library/Caches/FishFinder/world-map-experiment' if sys.platform=='darwin' else '.cache/FishFinder/world-map-experiment')

@@ -1,9 +1,20 @@
 """Small non-destructive checks under the actual application user's permissions."""
+
+# READING THIS FILE: check access before starting a write operation.
+#
+# These checks run with the application's actual user permissions. A file can
+# be writable while its parent folder is not; that matters for replacement files.
+# SQLite may also need adjacent -wal and -shm files. Return a useful explanation
+# instead of changing permissions or escalating to root automatically.
+# Temporary probes are created/closed without altering existing file contents.
+
 import os
 from pathlib import Path
 import tempfile
 
 
+# Probe read/write access and parent-folder access without changing existing contents. Return
+# an empty string when no problem is found.
 def write_problem(path, atomic=False):
     path=Path(path)
     try:
@@ -16,6 +27,8 @@ def write_problem(path, atomic=False):
     return ''
 
 
+# Check the main database and any existing SQLite sidecar files, returning the first
+# actionable permissions problem.
 def database_problem(path):
     for candidate in (Path(path),Path(str(path)+'-wal'),Path(str(path)+'-shm')):
         if candidate==Path(path) or candidate.exists():

@@ -3,6 +3,19 @@
 Only standard-library modules are required. Output is a small binary PPM image;
 Tk doubles it once and reuses that PhotoImage across traffic frames.
 """
+
+# READING THIS FILE: paint the background map without freezing touch input.
+#
+# The expensive map work runs in a separate PROCESS, not in Tkinter's window
+# thread. The window requests a center/orientation/range and receives a small
+# raster image plus town labels. Requests/results favor the newest view so
+# rapid zooming does not accumulate a long queue of old maps.
+#
+# The renderer works on a bounded square image; the display handles the circular
+# screen. Water polygons are filled, while roads/rails/rivers are stroked lines.
+# A stale result from a different zoom or brightness must not be shown as if it
+# belonged to the current view.
+
 import json
 import math
 import multiprocessing as mp
@@ -12,6 +25,7 @@ from pathlib import Path
 PACK=Path(__file__).with_name('demo_ground.json')
 BG=(3,9,9)
 
+# Read and validate a small local map pack before allowing its geometry into the renderer.
 def load_pack(path=PACK):
     path=Path(path)
     if path.stat().st_size>2000000:raise ValueError('Demo pack too large')
@@ -20,6 +34,7 @@ def load_pack(path=PACK):
     bounds=data['bounds']
     if len(bounds)!=4 or not all(math.isfinite(v) for v in bounds):raise ValueError('Invalid bounds')
     count=0
+    # Validate one sequence of geographic points and count it against the geometry budget.
     def points(coords):
         nonlocal count
         count+=len(coords)
@@ -38,6 +53,7 @@ def load_pack(path=PACK):
         polygons.append(rings)
     return bounds,tuple(paths),tuple(polygons)
 
+# Turn a geographic point into rotated east/north coordinates for the requested map view.
 def project(lat,lon,origin):
     a,b=map(math.radians,(origin[0],lat));dl=math.radians((lon-origin[1]+180)%360-180)
     hav=math.sin((b-a)/2)**2+math.cos(a)*math.cos(b)*math.sin(dl/2)**2
@@ -45,6 +61,7 @@ def project(lat,lon,origin):
     bearing=math.atan2(math.sin(dl)*math.cos(b),math.cos(a)*math.sin(b)-math.sin(a)*math.cos(b)*math.cos(dl))
     return distance*math.sin(bearing),distance*math.cos(bearing)
 
+# Trim a line to a square image boundary before rasterization.
 def clip_rectangle(a,b,size):
     # Liang-Barsky: bound line work even for faraway source geometry.
     x,y=a;dx,dy=b[0]-x,b[1]-y;lo,hi=0.,1.
@@ -58,6 +75,8 @@ def clip_rectangle(a,b,size):
             if lo>hi:return None
     return (x+lo*dx,y+lo*dy),(x+hi*dx,y+hi*dy)
 
+# Paint a bounded RGB image: filled water, colored landmark lines and brightness. Return
+# image bytes for the UI process.
 def rasterize(paths,polygons,state):
     origin,heading,radius,level,size=state
     if not (2<=radius<=20 and level in (1,2) and 64<=size<=512):raise ValueError('Invalid render state')
@@ -67,12 +86,15 @@ def rasterize(paths,polygons,state):
     rail=(86,65,112) if level==1 else (128,96,163)
     water=(20,52,68) if level==1 else (32,78,98)
     shore=water
+    # Map one projected point into raster pixels, including a vertical-axis reversal.
     def screen(points):
         result=[]
         for lat,lon in points:
             e,n=project(lat,lon,origin)
             result.append((center+(e*cos-n*sin)*scale,center-(e*sin+n*cos)*scale))
         return result
+    # Fill polygon scanlines, using intersections rather than painting every polygon vertex
+    # as a separate object.
     def fill(rings,color):
         # Even/odd scanline rule fills complete outer rings and preserves islands.
         transformed=[screen(r) for r in rings]
@@ -93,6 +115,7 @@ def rasterize(paths,polygons,state):
             urban=(19,23,28) if level==1 else (30,36,45)
             fill(polygon['rings'],urban if polygon['kind']=='ground_urban' else water)
         else:fill(polygon,water)
+    # Draw one bounded polyline into the raster image.
     def stroke(points,color,dashed=False):
         color=bytes(color);step=0
         for a,b in zip(points,points[1:]):
@@ -118,6 +141,7 @@ def rasterize(paths,polygons,state):
         pixels[(row*size+hi+1)*3:((row+1)*size)*3]=bytes(BG)*(size-hi-1)
     return f'P6\n{size} {size}\n255\n'.encode()+pixels
 
+# Keep a queue focused on its newest item instead of building a backlog of obsolete views.
 def latest_put(channel,message):
     try:channel.put_nowait(message)
     except queue.Full:
@@ -126,6 +150,8 @@ def latest_put(channel,message):
         try:channel.put_nowait(message)
         except queue.Full:pass
 
+# Wait for map requests in a separate process, load the appropriate reader, render, and
+# return either a result or an error.
 def render_process(path,requests,results):
     # This module has no Tk import; spawn cannot inherit the GUI's Tk state.
     try:
@@ -154,7 +180,9 @@ def render_process(path,requests,results):
     finally:
         if 'world' in locals() and world:world.close()
 
+# The window-side bridge to the background renderer, its queues and the latest result.
 class GroundLayer:
+    # Create the process/queues used to render maps independently of Tkinter.
     def __init__(self,path=PACK):
         ctx=mp.get_context('spawn')
         self.requests=ctx.Queue(maxsize=1);self.results=ctx.Queue(maxsize=2)
@@ -162,8 +190,14 @@ class GroundLayer:
         self.world=Path(path).suffix=='.sqlite'
         self.process=ctx.Process(target=render_process,args=(str(path),self.requests,self.results),daemon=True,name='ground-raster')
         self.process.start()
+    # Submit the latest desired map view without blocking the window on rendering.
+    # The window asks for a view and keeps running; it must not wait here for every map pixel
+    # to be painted.
     def request(self,state):
         if not self.closed and not self.error:latest_put(self.requests,state)
+    # Collect completed results without waiting; retain the newest available result or error.
+    # Polling means 'check for an already-finished result', not 'wait for one'. That
+    # difference keeps touch events responsive.
     def poll(self):
         # At most two tiny/one-image messages; no waits or geometry work in GUI.
         for _ in range(2):
@@ -173,12 +207,15 @@ class GroundLayer:
             elif message[0]=='error':self.error=message[1]
             else:self.result=message[1:]
         if self.process.exitcode is not None and not self.closed and not self.error:self.error='Map renderer stopped'
+    # Tell the map process to stop and release its process/queue resources.
     def close(self):
         if self.closed:return
         self.closed=True
         if self.process.is_alive():self.process.terminate()
         self.process.join(timeout=.1)
         for channel in (self.requests,self.results):channel.cancel_join_thread();channel.close()
+    # Check whether the selected pack includes the requested view; a missing region is not
+    # filled with invented data.
     def covers(self,origin,radius):
         if not self.bounds:return False
         if self.bounds==[-90,-180,90,180]:return True

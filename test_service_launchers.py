@@ -1,3 +1,9 @@
+# READING THE TESTS: this file checks behavior without requiring a flight.
+# An assert... call states what must be true; a failed assertion means the
+# observed result differs from the expected one. Mock/patch objects temporarily
+# replace a dependency, so tests can exercise errors without changing hardware.
+# These checks on a Mac do not replace touchscreen/GPS validation on the Pi.
+
 import os
 from pathlib import Path
 import signal
@@ -19,6 +25,7 @@ class ServiceTests(unittest.TestCase):
         flock.write_text(f'#!{sys.executable}\nimport fcntl,sys\ntry:fcntl.flock(int(sys.argv[-1]),fcntl.LOCK_EX|fcntl.LOCK_NB)\nexcept BlockingIOError:sys.exit(1)\n');flock.chmod(0o755)
         env=dict(os.environ,PATH=f'{root}:/usr/bin:/bin',TEST_LOG=str(log),FISHFINDER_PYTHON=str(python),FISHFINDER_LOCK_FILE=str(root/'collector.lock'))
         return env,log
+    # Check: mode database and argument forwarding.
     def test_mode_database_and_argument_forwarding(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);env,log=self.environment(root)
@@ -32,6 +39,7 @@ class ServiceTests(unittest.TestCase):
                 for forbidden in ['--demo','--db=/tmp/unsafe.db']:
                     result=subprocess.run(['bash',str(ROOT/script),forbidden],env=env,capture_output=True,text=True)
                     self.assertEqual(result.returncode,2)
+    # Check: shared lock blocks second mode.
     def test_shared_lock_blocks_second_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);env,log=self.environment(root,True)
@@ -49,6 +57,7 @@ class ServiceTests(unittest.TestCase):
             env,log=self.environment(root)
             result=subprocess.run(['bash',str(ROOT/'DemoFinder.bash')],env=env,capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stderr)
+    # Check: single service mode switch and venv detection.
     def test_single_service_mode_switch_and_venv_detection(self):
         app=Path('/usr/local/FishFinder/FishFinder-v0.4.11');python=app.parent/'.venv/bin/python3';home=Path('/home/pilot')
         for demo in [True,False]:
@@ -62,6 +71,7 @@ class ServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             app=Path(tmp)/'version';app.mkdir();venv=app.parent/'.venv/bin/python3';venv.parent.mkdir(parents=True);venv.write_text('');venv.chmod(0o755)
             self.assertEqual(find_python(app),venv)
+    # Check: working directory is literal and verifier is required.
     def test_working_directory_is_literal_and_verifier_is_required(self):
         app=Path('/usr/local/FishFinder/version with space')
         unit=next(iter(files_for('pilot',Path('/home/pilot'),app,Path('/var/local/FishFinder/demo_objects.db'),True).values()))
@@ -77,6 +87,7 @@ class ServiceTests(unittest.TestCase):
         with patch('configure_pi.subprocess.run',return_value=subprocess.CompletedProcess([],1,'','bad unit')):
             with self.assertRaisesRegex(ValueError,'bad unit'):verify_unit(unit,'/usr/bin/systemd-analyze')
 
+    # Check: live display uses live database.
     def test_live_display_uses_live_database(self):
         text=(ROOT/'Display.bash').read_text()
         self.assertIn('xinput map-to-output',text);self.assertIn('/flying_objects.db',text)

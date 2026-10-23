@@ -1,3 +1,9 @@
+# READING THE TESTS: this file checks behavior without requiring a flight.
+# An assert... call states what must be true; a failed assertion means the
+# observed result differs from the expected one. Mock/patch objects temporarily
+# replace a dependency, so tests can exercise errors without changing hardware.
+# These checks on a Mac do not replace touchscreen/GPS validation on the Pi.
+
 import os
 import subprocess
 import tempfile
@@ -18,6 +24,7 @@ class LauncherTests(unittest.TestCase):
             env=dict(os.environ,PATH=f'{root}:/usr/bin:/bin',TEST_XRANDR=geometry,TEST_LOG=str(log),TEST_MAPPING_STATUS='0' if mapping_ok else '1',FISHFINDER_PYTHON=str(root/'python'))
             result=subprocess.run(['bash',str(script),'--touch-debug'],env=env,capture_output=True,text=True)
             return result,log.read_text() if log.exists() else ''
+    # Check: single and dual monitor geometry.
     def test_single_and_dual_monitor_geometry(self):
         for offset in ('+0+0','+1920+0','-800+0'):
             with self.subTest(offset=offset):
@@ -26,6 +33,7 @@ class LauncherTests(unittest.TestCase):
                 self.assertIn('xinput:map-to-output pointer:10-0014 Goodix Capacitive TouchScreen DSI-1',log)
                 self.assertIn(f'--geometry 800x800{offset} --fullscreen --touch-debug',log)
                 self.assertLess(log.index('xinput:'),log.index('python:'))
+    # Check: production display mapping and database.
     def test_production_display_mapping_and_database(self):
         result,log=self.run_launcher('DSI-1 connected 800x800+0+0',script=SCRIPT.with_name('Display.bash'))
         self.assertEqual(result.returncode,0,result.stderr)
@@ -34,6 +42,7 @@ class LauncherTests(unittest.TestCase):
         self.assertNotIn('--demo',command)
         self.assertIn('--geometry 800x800+0+0',command)
 
+    # Check: failure stops before display.
     def test_failure_stops_before_display(self):
         result,log=self.run_launcher('DSI-1 connected 800x800+0+0',False)
         self.assertNotEqual(result.returncode,0);self.assertNotIn('python:',log)

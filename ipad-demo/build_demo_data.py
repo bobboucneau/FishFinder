@@ -1,4 +1,14 @@
 """Export the existing seeded Python scenario and airport reference for the web demo."""
+
+# READING THIS FILE: export a synthetic scene for the browser-only demo.
+#
+# This Python tool runs during preparation of a web release. It samples the same
+# Scenario used by the Pi demo, writes trajectories and airport references as
+# JSON, and optionally extracts nearby town labels from the world map archive.
+# The browser downloads those small files; it does not run Python or connect to
+# Stratux. The optional world archive is read here but is never copied to the site.
+# All displayed aircraft in this export are fictional.
+
 from pathlib import Path
 import json,sys,math
 ROOT=Path(__file__).resolve().parent.parent

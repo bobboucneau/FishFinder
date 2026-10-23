@@ -1,3 +1,9 @@
+# READING THE TESTS: this file checks behavior without requiring a flight.
+# An assert... call states what must be true; a failed assertion means the
+# observed result differs from the expected one. Mock/patch objects temporarily
+# replace a dependency, so tests can exercise errors without changing hardware.
+# These checks on a Mac do not replace touchscreen/GPS validation on the Pi.
+
 from contextlib import closing
 import json
 import math
@@ -23,6 +29,7 @@ except ModuleNotFoundError as exc:
 
 
 class Tests(unittest.TestCase):
+    # Check: label settings zoom and runway extensions.
     def test_label_settings_zoom_and_runway_extensions(self):
         self.assertEqual(settings.validate({})['label_size'],'normal')
         self.assertTrue(settings.validate({})['runway_extensions'])
@@ -47,6 +54,7 @@ class Tests(unittest.TestCase):
             self.assertFalse(redraw(5))  # A schematic is not a located centerline.
         obj.stop.set()
 
+    # Check: wake then range and exit touch actions.
     def test_wake_then_range_and_exit_touch_actions(self):
         obj=gui();obj.touch_debug=True
         from io import StringIO
@@ -69,6 +77,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(obj.touch_mark[:2],(482,460))
         obj.stop.set()
 
+    # Check: hidden object tap preserves hidden controls.
     def test_hidden_object_tap_preserves_hidden_controls(self):
         obj=gui();obj.last_touch=time.monotonic()-20;obj.draw()
         x,y,tail=obj.hits[0]
@@ -80,6 +89,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(obj.buttons,[])
         obj.stop.set()
 
+    # Check: double tap cancels object popup.
     def test_double_tap_cancels_object_popup(self):
         obj=gui();obj.last_touch=time.monotonic()-20;obj.draw()
         x,y,tail=obj.hits[0]
@@ -94,6 +104,7 @@ class Tests(unittest.TestCase):
         self.assertIsNone(obj.selected);self.assertFalse(obj.idle)
         obj.stop.set()
 
+    # Check: hide vertical setting and display.
     def test_hide_vertical_setting_and_display(self):
         self.assertFalse(settings.validate({})['hide_vertical'])
         with self.assertRaises(ValueError):settings.validate({'hide_vertical':'yes'})
@@ -104,6 +115,7 @@ class Tests(unittest.TestCase):
         self.assertTrue([hit for hit in obj.hits if hit[2]!='__ownship__'])
         obj.stop.set()
 
+    # Check: ground map preference saved and applied.
     def test_ground_map_preference_saved_and_applied(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'settings.json'
@@ -126,6 +138,7 @@ class Tests(unittest.TestCase):
                 start.assert_called_once();self.assertEqual(obj.ground_level,1)
         obj.stop.set()
 
+    # Check: settings validation and atomic persistence.
     def test_settings_validation_and_atomic_persistence(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'settings.json'
@@ -136,6 +149,7 @@ class Tests(unittest.TestCase):
             self.assertEqual(path.read_text(),baseline)
             self.assertEqual(cfg['vertical_threshold_ft'],5000)
 
+    # Check: vertical styles and closure.
     def test_vertical_styles_and_closure(self):
         now=time.time()
         def track(alt,rate=0,ref='pressure'):
@@ -149,6 +163,7 @@ class Tests(unittest.TestCase):
         unknown=[d.Point(i,now-20+i*10,37,-122,100,None,3000,'pressure') for i in range(3)]
         self.assertFalse(d.vertical_clear(track(14000),unknown,5000))
 
+    # Check: scope idle and wake touch.
     def test_scope_idle_and_wake_touch(self):
         display=gui()
         self.assertAlmostEqual(display.pixels*display.radius_nm,398)
@@ -170,6 +185,7 @@ class Tests(unittest.TestCase):
         display.tap(SimpleNamespace(x=400,y=770));self.assertFalse(display.idle)
         display.tap(SimpleNamespace(x=400,y=770));self.assertTrue(display.exit_pending)
 
+    # Check: parallel runways without changing cache.
     def test_parallel_runways_without_changing_cache(self):
         display=gui();airport=display.catalog.airports['KRHV']
         baseline=json.dumps(airport)
@@ -179,6 +195,7 @@ class Tests(unittest.TestCase):
         self.assertTrue(all(r.get('_aligned') for r,_,_,_ in segments))
         self.assertEqual(json.dumps(airport),baseline)
 
+    # Check: collector migration and nullable own altitude.
     def test_collector_migration_and_nullable_own_altitude(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'data.db';collector.initialize(path);collector.initialize(path)
@@ -192,6 +209,7 @@ class Tests(unittest.TestCase):
             finally:conn.close()
             self.assertIsNone(d.read_snapshot(path).ownship[-1].altitude)
 
+    # Check: wrong device and connection failure are quiet.
     def test_wrong_device_and_connection_failure_are_quiet(self):
         class Response:
             def __enter__(self):return self
@@ -211,6 +229,7 @@ class Tests(unittest.TestCase):
                 row=conn.execute('SELECT available,message FROM receiver_status').fetchone()
                 self.assertEqual(row,(0,'Stratux not available. Waiting...'))
 
+    # Check: traffic reconnect options and diagnostics.
     def test_traffic_reconnect_options_and_diagnostics(self):
         self.assertEqual([collector.traffic_retry_delay(n) for n in range(1,8)],[1,2,4,5,5,5,5])
         options=collector.traffic_socket_options()
@@ -237,6 +256,7 @@ class Tests(unittest.TestCase):
         self.assertEqual(captured['delay'],1)
         self.assertEqual(captured['http_no_proxy'],['192.168.10.1'])
 
+    # Check: saved reports return to info level.
     def test_saved_reports_return_to_info_level(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'data.db';collector.initialize(path)
@@ -247,12 +267,14 @@ class Tests(unittest.TestCase):
                 collector.record_traffic(conn,dict(Icao_addr=124,Reg='N124AB',Lat=37,Lng=-122,Alt=10000,Speed=100),time.time())
                 self.assertTrue(info.called);self.assertFalse(info.call_args.args[6]);self.assertIn('sample_interval',info.call_args.args[7])
 
+    # Check: quiet stream is normal by default.
     def test_quiet_stream_is_normal_by_default(self):
         self.assertEqual(collector.TRAFFIC_IDLE_SECONDS,0)
         self.assertFalse(collector.traffic_stream_idle(None,1000,20))
         self.assertFalse(collector.traffic_stream_idle(1,1000,0))
         self.assertTrue(collector.traffic_stream_idle(1,22,20))
 
+    # Check: database processing runs off websocket callback.
     def test_database_processing_runs_off_websocket_callback(self):
         import threading
         arrived=threading.Event();release=threading.Event();second_received=threading.Event()
@@ -273,6 +295,7 @@ class Tests(unittest.TestCase):
                 collector.traffic_loop(stopped,path)
         self.assertTrue(arrived.is_set());self.assertTrue(second_received.is_set())
 
+    # Check: extrapolated reports preserve uncertainty.
     def test_extrapolated_reports_preserve_uncertainty(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'data.db';collector.initialize(path);collector.initialize(path)
@@ -289,6 +312,7 @@ class Tests(unittest.TestCase):
             self.assertTrue(p.estimated);self.assertEqual(p.position_age,30)
             self.assertIsNone(p.comparison_alt)
 
+    # Check: report rejection reasons are visible.
     def test_report_rejection_reasons_are_visible(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'data.db';collector.initialize(path)
@@ -299,6 +323,7 @@ class Tests(unittest.TestCase):
                         self.assertFalse(collector.record_traffic(conn,dict(base,**changes),time.time()))
                         self.assertIn(reason,info.call_args.args[7])
 
+    # Check: truncated update retains cache.
     def test_truncated_update_retains_cache(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'airports.json'

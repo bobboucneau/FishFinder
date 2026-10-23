@@ -1,3 +1,9 @@
+# READING THE TESTS: this file checks behavior without requiring a flight.
+# An assert... call states what must be true; a failed assertion means the
+# observed result differs from the expected one. Mock/patch objects temporarily
+# replace a dependency, so tests can exercise errors without changing hardware.
+# These checks on a Mac do not replace touchscreen/GPS validation on the Pi.
+
 import gzip
 import json
 from pathlib import Path
@@ -44,6 +50,7 @@ def fixture(path):
     return t.decode_tile(raw,z,x,y)[2][0][:2]
 
 class TileTests(unittest.TestCase):
+    # Check: geometry polygon holes and names.
     def test_geometry_polygon_holes_and_names(self):
         outer=[(2000,2000),(2100,2000),(2100,2100),(2000,2100)]
         hole=[(2020,2020),(2020,2080),(2080,2080),(2080,2020)]
@@ -53,6 +60,7 @@ class TileTests(unittest.TestCase):
         self.assertEqual(labels[0],(0,0,'Columbia'));self.assertGreater(count,8)
         # Filled water retains the center island after decoding.
         ppm=g.rasterize(paths,polygons,((0,0),0,20,1,100));self.assertTrue(ppm.startswith(b'P6'))
+    # Check: attribution follows lower right rim and water matches.
     def test_attribution_follows_lower_right_rim_and_water_matches(self):
         from test_airports import gui
         obj=gui();obj.canvas.commands=[]
@@ -73,12 +81,14 @@ class TileTests(unittest.TestCase):
         blue=bytes((20,52,68))
         self.assertIn(blue,fill);self.assertIn(blue,river)
 
+    # Check: reject truncation commands and bombs.
     def test_reject_truncation_commands_and_bombs(self):
         for raw in (b'\x80',b'\x0a\x05x',b'\x0f'):
             with self.assertRaises(ValueError):list(t.fields(raw))
         for raw in (b'\x09\x00',b'\x0a\x00\x00',b'\x00'):
             with self.assertRaises(ValueError):t.geometry(raw,2)
         with self.assertRaises(ValueError):t.decode_tile(gzip.compress(b'0'*8_000_001),0,0,0)
+    # Check: build simplification removes small detail and keeps ring winding.
     def test_build_simplification_removes_small_detail_and_keeps_ring_winding(self):
         from build_rich_ground import simplify_geometry
         line=commands([[(0,0),(1,1),(2,0),(10,0)]])
@@ -92,6 +102,7 @@ class TileTests(unittest.TestCase):
         self.assertGreater(area(parts[0]),0);self.assertLess(area(parts[1]),0)
         self.assertTrue(all(r[0]==r[-1] for r in parts))
 
+    # Check: archive local query caches and subprocess.
     def test_archive_local_query_caches_and_subprocess(self):
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'test.pmtiles';origin=fixture(path)

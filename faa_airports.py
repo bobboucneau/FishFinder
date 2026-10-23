@@ -1,4 +1,17 @@
 """FAA NASR airport enrichment. Only effective cycles and explicit fields are used."""
+
+# READING THIS FILE: add FAA airport-reference facts to a candidate catalog.
+#
+# OurAirports supplies general geometry and radio information. FAA NASR supplies
+# US tower status, pattern direction and pattern-altitude details. Join records
+# carefully using identifiers AND a location check; a similar name is not enough.
+# Only a currently effective 28-day cycle is accepted. A runway-end record is
+# needed before the US default-left convention is applied.
+#
+# The function enrich() changes an in-memory candidate dictionary. It does not
+# write the installed catalog. The outer airport updater decides whether the
+# whole candidate is valid and safe to install.
+
 import csv
 from datetime import date,datetime,timedelta,timezone
 import io
@@ -10,12 +23,15 @@ from airport_data import number
 
 INDEX='https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/'
 
+# Fetch a bounded number of bytes from a reference-data URL; reject oversized responses.
 def download(url,limit):
     request=urllib.request.Request(url,headers={'User-Agent':'FishFinder-airport-reference/0.4'})
     with urllib.request.urlopen(request,timeout=90) as response:raw=response.read(limit+1)
     if len(raw)>limit:raise ValueError('FAA download exceeds size limit')
     return raw
 
+# Find the latest published FAA cycle that is already effective today, rather than
+# accidentally using a future cycle.
 def cycle_links(html,today=None):
     today=today or datetime.now(timezone.utc).date()
     matches=re.findall(r'href=["\']([^"\']*NASR_Subscription/(\d{4}-\d{2}-\d{2})/?)["\']',html,re.I)
@@ -23,6 +39,7 @@ def cycle_links(html,today=None):
     if not valid:raise ValueError('No effective FAA cycle found')
     return max(valid)
 
+# Stream CSV rows from the ZIP after checking table size and mandatory column names.
 def rows(archive,name,required):
     info=archive.getinfo(name)
     if info.file_size>100_000_000:raise ValueError('FAA table too large')
@@ -74,6 +91,8 @@ def enrich(data,raw,effective,source):
     data['faa']=dict(effective=effective,expires=end.isoformat(),source=source,matched=count)
     return data
 
+# Locate the current airport CSV archive on the FAA site, validate its host, download it and
+# enrich the candidate catalog.
 def fetch_enrichment(data):
     day,page=cycle_links(download(INDEX,2_000_000).decode('utf-8'))
     html=download(page,2_000_000).decode('utf-8')

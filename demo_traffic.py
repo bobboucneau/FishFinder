@@ -1,4 +1,21 @@
 """Seeded, offline flight scenarios. Coordinates are local nautical miles."""
+
+# READING THIS FILE: an offline world of synthetic flights.
+#
+# Scenario owns the list of Flight objects and schedules departures/transits.
+# Each flight has a stable synthetic address, a fictional NX label, a start time,
+# and a sequence of timed positions. sample() finds a position between samples.
+# The seeded random generator makes a chosen run repeatable for testing.
+#
+# Distances here are local nautical miles; altitude is feet; speed is knots.
+# The pattern-building input uses 75 mph converted to knots. Rounded turns model
+# three degrees per second. Candidate flights are checked against existing
+# flights and ownship before admission; this is a demo scheduling constraint,
+# not a collision-avoidance guarantee for real aircraft.
+#
+# run() emits simulated traffic through the SAME recording functions used for
+# real traffic. The separate demo database prevents mixing the two modes.
+
 from dataclasses import dataclass
 import bisect
 import json
@@ -18,6 +35,8 @@ def demo_registration(address):
     return f'NX{100+number:03d}{letters[letter]}'
 
 
+# Convert simulated east/north nautical-mile offsets back into real latitude/longitude around
+# the demo origin.
 def geographic(origin, east, north):
     radius=3440.065
     distance=math.hypot(east,north)/radius
@@ -28,11 +47,15 @@ def geographic(origin, east, north):
     return math.degrees(target),(math.degrees(longitude)+180)%360-180
 
 
+# Convert nearby airport latitude/longitude into the local plane used to construct simulated
+# routes.
 def local(origin, lat, lon):
     # Adequate for these short simulator routes; display uses great-circle mapping.
     return ((lon-origin[1])*60*math.cos(math.radians(origin[0])),(lat-origin[0])*60)
 
 
+# A timed synthetic route: address and label identify it; nodes describe where it is over
+# elapsed time.
 @dataclass
 class Flight:
     address: int
@@ -41,9 +64,12 @@ class Flight:
     start: float
     nodes: list  # (seconds, east NM, north NM, altitude ft, speed kt)
 
+    # Return the absolute simulation time at the end of this route.
     @property
     def end(self): return self.start+self.nodes[-1][0]
 
+    # Find the two timed nodes around now and interpolate between them. Return None before
+    # takeoff or after the route finishes.
     def sample(self, now):
         t=now-self.start
         if t<0 or t>self.nodes[-1][0]:return None
@@ -52,6 +78,8 @@ class Flight:
         return tuple(a[i]+(b[i]-a[i])*ratio for i in range(1,5))
 
 
+# Convert a list of positions/altitudes/speeds into timed nodes by calculating travel time
+# between each pair.
 def route(address,tail,kind,start,waypoints):
     nodes=[];elapsed=0
     for i,p in enumerate(waypoints):
@@ -80,6 +108,7 @@ def rounded_route(address,tail,kind,start,waypoints):
         center=(entry[0]-u[1]*radius*sign,entry[1]+u[0]*radius*sign)
         corners[i]=(entry,exit,center,theta,radius)
     nodes=[(0,*waypoints[0])]
+    # Add a straight portion of a smoothed route while maintaining its timing.
     def straight(p):
         previous=nodes[-1];distance=math.hypot(p[0]-previous[1],p[1]-previous[2])
         if distance<1e-9:return
@@ -97,7 +126,10 @@ def rounded_route(address,tail,kind,start,waypoints):
     return Flight(address,tail,kind,start,nodes)
 
 
+# Own all demo aircraft, repeatable randomness, schedules and the route-building rules.
 class Scenario:
+    # Load the four demo airports, seed the random generator, and prepare departure schedules
+    # and traffic-pattern geometry.
     def __init__(self, airports_path=None, seed=22):
         path=airports_path or Path(__file__).with_name('airports.json')
         records=json.loads(Path(path).read_text())['airports']
@@ -109,6 +141,8 @@ class Scenario:
         self.next_airline=20;self.next_ga=45;self.next_heli=100;self.generated_until=-1
         self.patterns=[self.pattern(*spec[:3]) for spec in AIRPORTS]
 
+    # Build one airport traffic-pattern route from its actual runway endpoints and the
+    # requested climb/speed profile.
     def pattern(self,code,runway,elevation):
         airport=self.airports[code]
         r=next(r for r in airport['runways'] if runway in (r['le_ident'],r['he_ident']))
@@ -127,10 +161,14 @@ class Scenario:
                 (-.5*MPH_TO_KNOTS,0,500,approach),(0,0,0,approach)]
         return [(threshold[0]+a*forward[0]+b*right[0],threshold[1]+a*forward[1]+b*right[1],elevation+alt,speed) for a,b,alt,speed in layout]
 
+    # Place the simulated ownship on its five-nautical-mile circular orbit at the requested
+    # simulation time.
     def ownship(self,t):
         speed=100.;angle=t*speed/(3600*5)
         return 5*math.cos(angle),5*math.sin(angle),5000.,speed
 
+    # Check a candidate route against admitted traffic and ownship at sampled times, with an
+    # extra separation margin.
     def separated(self,flight):
         # Entire routes checked every second, with margins to cover interpolation.
         others=[f for f in self.flights if f.end>=flight.start and f.start<=flight.end]
@@ -142,10 +180,14 @@ class Scenario:
                 if abs(p[2]-q[2])<400 and math.hypot(p[0]-q[0],p[1]-q[1])<.35:return False
         return True
 
+    # Append a flight only when the demo separation check accepts it; otherwise count the
+    # rejected candidate.
     def admit(self,flight):
         if self.separated(flight):self.flights.append(flight);return True
         self.rejected+=1;return False
 
+    # Create an airliner or faster GA aircraft crossing the area with randomized endpoints,
+    # speed and altitude.
     def transit(self,start,kind):
         self.serial+=1;angle=self.random.uniform(0,2*math.pi)
         finish=angle+math.pi+self.random.uniform(-.7,.7)
@@ -154,6 +196,8 @@ class Scenario:
         points=[(32*math.cos(a),32*math.sin(a),alt,speed) for a in (angle,finish)]
         return route(0xD10000+self.serial,demo_registration(0xD10000+self.serial),kind,start,points)
 
+    # Choose a Columbia/Pine Mountain Lake/southwest helicopter route and connect airport
+    # altitude to cruise altitude.
     def helicopter(self,start):
         self.serial+=1;o22=self.airports['O22'];e45=self.airports['E45']
         col=local(self.origin,o22['lat'],o22['lon']);pine=local(self.origin,e45['lat'],e45['lon'])
@@ -165,6 +209,11 @@ class Scenario:
         points=[(*a,2100 if a==col else 3500,80),middle(fraction),middle(1-fraction),(*b,2100 if b==col else 2933 if b==pine else 3500,80)]
         return route(0xD20000+self.serial,demo_registration(0xD20000+self.serial),'helicopter',start,points)
 
+    # Generate every departure due by now in chronological order, then discard old finished
+    # flights.
+    # Simulation scheduling is driven by the requested time, not by how frequently a caller
+    # asks for messages. That helps the Python demo and exported browser trajectories stay
+    # consistent.
     def advance(self,now):
         # Generate chronologically, independent of the caller's polling frequency.
         while True:
@@ -189,6 +238,8 @@ class Scenario:
         self.generated_until=now
         self.flights=[f for f in self.flights if f.end>=now-300]
 
+    # Turn current simulated positions into Stratux-shaped traffic and situation dictionaries
+    # so the ordinary collector can record them.
     def messages(self,now):
         self.advance(now)
         result=[]
@@ -205,6 +256,8 @@ class Scenario:
         return result,own
 
 
+# Advance the demo from elapsed monotonic time and repeatedly feed synthetic messages through
+# the real recording pipeline.
 def run(stop,db_path,seed=22):
     import logging
     import time
@@ -212,6 +265,8 @@ def run(stop,db_path,seed=22):
     import FishFinder as collector
     scenario=Scenario(seed=seed);start=time.monotonic();last_own=-3
     logging.warning('DEMO MODE: synthetic traffic; no Stratux connection. Database %s',db_path)
+    # Use the caller's selected demo database and ordinary collector functions. The demo does
+    # not need a Stratux network connection.
     with closing(collector.connect_database(db_path)) as conn:
         while not stop.is_set():
             elapsed=time.monotonic()-start

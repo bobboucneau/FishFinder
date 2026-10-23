@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
 """Preview or install non-root FishFinder service and optional console X startup."""
+
+# READING THIS FILE: generate Raspberry Pi startup configuration.
+#
+# Preview is the default; --install is the explicit request to write system
+# configuration. The collector runs under the selected ordinary user, even
+# though installing its service requires administrator privileges. This file
+# also generates optional console/X startup text; those quoted strings are
+# scripts or service files to be used later, not Python executed here.
+#
+# There are THREE quoting rules: Python strings, shell arguments, and systemd
+# configuration. They are not interchangeable. Keep WorkingDirectory literal;
+# its surrounding quote characters would become part of the directory name.
+# Validate a candidate service before replacing a working installation.
+
 import argparse
 import os
 from pathlib import Path
@@ -14,6 +28,8 @@ SERVICE='fishfinder-collector.service'
 MARKER='# FishFinder console startup'
 
 
+# Use an explicit interpreter override first; otherwise search the known virtual-environment
+# locations.
 def find_python(app,override=None):
     if override is not None:return Path(os.path.abspath(override))
     candidates=[app/'.venv/bin/python3',app.parent/'.venv/bin/python3',
@@ -21,6 +37,8 @@ def find_python(app,override=None):
     return next((p for p in candidates if p.is_file() and os.access(p,os.X_OK)),candidates[0])
 
 
+# Return proposed service/startup files as text. Generating this dictionary does not install
+# anything.
 def files_for(user, home, app, database, demo=False, boot_ui=False, python=None):
     python=python or app/'.venv/bin/python3'
     launcher=app/('DemoFinder.bash' if demo else 'Finder.bash')
@@ -30,6 +48,7 @@ def files_for(user, home, app, database, demo=False, boot_ui=False, python=None)
     if any(c in str(app) for c in '\n\r\x00'):raise ValueError('Invalid application path')
     directory=str(app).replace('%','%%')
     # ExecStart and Environment use systemd word quoting.
+    # Quote a single systemd argument correctly, including literal percent signs.
     def systemd(value):return '"'+str(value).replace('\\','\\\\').replace('"','\\"').replace('%','%%')+'"'
     unit=f'''[Unit]
 Description=FishFinder traffic collector ({'demo' if demo else 'production'})
@@ -57,6 +76,8 @@ StandardError=journal
 WantedBy=multi-user.target
 '''
     result={Path('/etc/systemd/system')/SERVICE:unit}
+    # Collector service setup and screen startup are separate choices. This early return
+    # leaves the desktop/session configuration alone when only the collector was requested.
     if not boot_ui:return result
     session=home/'.local/bin/fishfinder-xsession'
     result[session]=f'''#!/bin/sh
@@ -107,6 +128,8 @@ def verify_unit(content,validator):
             raise ValueError('systemd rejected the candidate unit:\n'+(result.stderr.strip() or result.stdout.strip()))
 
 
+# Show a preview unless --install was requested; validate candidates, preserve existing user
+# files where needed, then install/start services.
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--install',action='store_true',help='Apply changes; without this flag only preview files')

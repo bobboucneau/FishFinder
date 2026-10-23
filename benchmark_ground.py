@@ -1,5 +1,13 @@
 #!/usr/bin/env python3
 """Time local map queries/rasterization on the Pi without starting X or Stratux."""
+
+# READING THIS FILE: measure map cost rather than guessing at performance.
+#
+# Open a chosen archive, query/render representative views, and report timing
+# and memory information. These measurements describe the machine running this
+# script. A fast Mac result does NOT prove the Raspberry Pi will feel fast.
+# This is a development diagnostic, not a background service.
+
 import argparse
 import json
 import math
@@ -10,6 +18,8 @@ import sys
 import time
 from demo_ground import rasterize
 
+# Time representative map queries and rasterization, collecting measurements for this
+# computer.
 def benchmark(path,origin=(38.03,-120.41),iterations=3,heading=0):
     from tile_ground import TileMap
     from world_ground import WorldMap
@@ -27,6 +37,7 @@ def benchmark(path,origin=(38.03,-120.41),iterations=3,heading=0):
     usage=resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return {'map_bytes':Path(path).stat().st_size,'origin':origin,'heading':heading,'max_rss_mb':round(usage*(1 if sys.platform=='darwin' else 1024)/1e6,2),'views':result}
 
+# Parse archive/range/repeat options and print the benchmark measurements.
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('map',type=Path);p.add_argument('--lat',type=float,default=38.03);p.add_argument('--lon',type=float,default=-120.41);p.add_argument('--heading',type=float,default=0);p.add_argument('--iterations',type=int,default=3)
     a=p.parse_args()

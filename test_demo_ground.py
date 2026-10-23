@@ -1,3 +1,9 @@
+# READING THE TESTS: this file checks behavior without requiring a flight.
+# An assert... call states what must be true; a failed assertion means the
+# observed result differs from the expected one. Mock/patch objects temporarily
+# replace a dependency, so tests can exercise errors without changing hardware.
+# These checks on a Mac do not replace touchscreen/GPS validation on the Pi.
+
 import json
 import math
 import tempfile
@@ -12,17 +18,20 @@ from build_demo_ground import simplify,build,join_rings
 from test_airports import gui
 
 class GroundTests(unittest.TestCase):
+    # Check: simplification and complete boundaries only.
     def test_simplification_and_complete_boundaries_only(self):
         self.assertEqual(simplify([[0,0],[.00001,.5],[0,1]]),[[0,0],[0,1]])
         self.assertIsNone(join_rings([[{'lat':0,'lon':0},{'lat':0,'lon':1}]]))
         ring=join_rings([[{'lat':0,'lon':0},{'lat':0,'lon':1},{'lat':1,'lon':1}],[{'lat':0,'lon':0},{'lat':1,'lon':1}]])
         self.assertEqual(len(ring),1);self.assertEqual(ring[0][0],ring[0][-1])
+    # Check: pack validation.
     def test_pack_validation(self):
         bounds,paths,polygons=g.load_pack()
         self.assertTrue(paths);self.assertTrue(polygons)
         with tempfile.TemporaryDirectory() as tmp:
             path=Path(tmp)/'bad.json';path.write_text(json.dumps({'schema':2,'bounds':bounds,'paths':[{'kind':'road','points':[[float('nan'),0],[38,-120]]}]}))
             with self.assertRaises(ValueError):g.load_pack(path)
+    # Check: water fill holes mask and road rotation.
     def test_water_fill_holes_mask_and_road_rotation(self):
         origin=(0,0)
         # Large water square containing a centered island.
@@ -38,6 +47,7 @@ class GroundTests(unittest.TestCase):
         horizontal=[(0,-.5),(0,.5)]
         image=g.rasterize([('road',horizontal)],[],(origin,90,10,1,100)).split(b'\n',3)[3]
         self.assertIn((104,77,33),[tuple(image[(10*100+x)*3:(10*100+x+1)*3]) for x in (49,50)])
+    # Check: gui uses one cached image and rejects old zoom.
     def test_gui_uses_one_cached_image_and_rejects_old_zoom(self):
         obj=gui();origin=(38.03,-120.41);state=(origin,0,10,1,398)
         obj.ground_level=1;obj.ground_image=None;obj.ground_seen=None;obj.ground_request_key=None
@@ -53,6 +63,7 @@ class GroundTests(unittest.TestCase):
         obj.snapshot=d.Snapshot({},[]);obj.draw()
         self.assertFalse(any(c[0]=='create_image' for c in obj.canvas.commands))
         obj.stop.set()
+    # Check: process failure does not block display.
     def test_process_failure_does_not_block_display(self):
         layer=g.GroundLayer('/nonexistent/fishfinder-map.json')
         try:
@@ -61,6 +72,7 @@ class GroundTests(unittest.TestCase):
             self.assertTrue(layer.error)
         finally:layer.close()
         self.assertFalse(layer.process.is_alive())
+    # Check: trails batch without losing estimated style.
     def test_trails_batch_without_losing_estimated_style(self):
         obj=gui();obj.canvas.commands=[];obj.radius_nm=10;obj.cx=obj.cy=400;obj.map_heading=0;obj.pixels=39.8
         obj.trail_lines([(0,0),(1,0),(2,0),(3,0),(4,0)],d.GREEN,[False,False,True,True])
