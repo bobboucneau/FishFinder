@@ -416,6 +416,9 @@ class Display:
         # Create a stop signal and a one-slot handoff queue. Keeping only one snapshot favors
         # current state over a backlog of already-outdated pictures.
         self.stop=threading.Event(); self.out=queue.Queue(maxsize=1)
+        # Slow operating-system probes stay off the Tk/touch thread.
+        import system_health
+        self.health_monitor=system_health.Monitor(self.stop)
         self.snapshot=Snapshot({},[])
         # Load validated settings once for this window. self.config holds the choices;
         # self.radius_nm and similar fields hold the currently applied display state.
@@ -473,6 +476,31 @@ class Display:
             self.worker.start()
         self.splash_until=time.monotonic()+getattr(args,"splash_seconds",0)
         self.tick()
+
+    def draw_system_status(self, fix, now):
+        # A compact strip stays inside the round panel and visible in idle mode.
+        # Labels carry DEMO/unknown text so color is never the only explanation.
+        import system_health
+        monitor=getattr(self,'health_monitor',None)
+        health=monitor.latest if monitor else system_health.Health()
+        temp,warnings=system_health.hardware_status(health,time.monotonic())
+        snap=self.snapshot
+        demo=snap.demo or bool(snap.receiver and snap.receiver[2].startswith('DEMO:'))
+        states=system_health.indicators(snap.receiver,fix.time if fix else None,now,
+                                       demo,bool(snap.error)) + [temp]
+        colors={'green':GREEN,'amber':YELLOW,'red':RED,'unknown':MUTED}
+        self.rect(235,132,565,155,fill=BG,outline='')
+        for x,(label,state) in zip((245,355,445),states):
+            cx=self.cx+(x-400)*self.unit;cy=self.cy+(143-400)*self.unit
+            self.canvas.create_oval(cx-4*self.unit,cy-4*self.unit,cx+4*self.unit,cy+4*self.unit,
+                                    fill=colors[state],outline='')
+            self.text(x+9,143,label,fill=colors[state],size=9,anchor='w')
+        if snap.error:warnings.insert(0,('Storage / database unavailable','red'))
+        elif self.permission_issues:warnings.insert(0,('Write access · see Setup','amber'))
+        for index,(label,state) in enumerate(warnings[:4]):
+            y=558+index*21
+            self.rect(205,y-10,595,y+10,fill=BG,outline='')
+            self.text(400,y,label,fill=colors[state],size=10)
 
     # Signal workers to stop, close the map renderer and destroy the window. Closing the
     # display does not stop the separate collector service.
@@ -862,6 +890,9 @@ class Display:
         # Popups are drawn above the scope. A reserved ownship selection opens ownship
         # details; an ordinary key opens a traffic target. The crowded-target chooser has its
         # own stable list.
+        # Status survives the idle overlay removal, but airport pages/popups may
+        # cover it normally. It is informational and has no tiny touch targets.
+        self.draw_system_status(fix,now)
         if self.selected:
             self.ownship_details(fix,own,now) if self.selected=='__ownship__' else self.details(infos.get(self.selected))
         if self.airport_selected:
