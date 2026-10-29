@@ -489,12 +489,15 @@ class Display:
         states=system_health.indicators(snap.receiver,fix.time if fix else None,now,
                                        demo,bool(snap.error)) + [temp]
         colors={'green':GREEN,'amber':YELLOW,'red':RED,'unknown':MUTED}
-        self.rect(235,132,565,155,fill=BG,outline='')
+        # Idle mode frees the header area. At y=62 the entire strip still fits
+        # inside the circular panel; the normal control layout stays unchanged.
+        status_y=62 if self.idle else 143
+        self.rect(235,status_y-11,565,status_y+12,fill=BG,outline='')
         for x,(label,state) in zip((245,355,445),states):
-            cx=self.cx+(x-400)*self.unit;cy=self.cy+(143-400)*self.unit
+            cx=self.cx+(x-400)*self.unit;cy=self.cy+(status_y-400)*self.unit
             self.canvas.create_oval(cx-4*self.unit,cy-4*self.unit,cx+4*self.unit,cy+4*self.unit,
                                     fill=colors[state],outline='')
-            self.text(x+9,143,label,fill=colors[state],size=9,anchor='w')
+            self.text(x+9,status_y,label,fill=colors[state],size=9,anchor='w')
         if snap.error:warnings.insert(0,('Storage / database unavailable','red'))
         elif self.permission_issues:warnings.insert(0,('Write access · see Setup','amber'))
         for index,(label,state) in enumerate(warnings[:4]):

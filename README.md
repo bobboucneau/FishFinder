@@ -1,3 +1,5 @@
+v0.4.27 moves the status strip toward the top of the round display in idle mode; its position with controls visible is unchanged.
+
 v0.4.26 adds persistent Stratux/GPS/Temp indicators and warning-only memory, power/throttling and database-access messages. Hardware probes run every five seconds in a background thread. Demo connection indicators explicitly say DEMO. See [STATUS-INDICATORS.md](STATUS-INDICATORS.md).
 
 v0.4.25 is a documentation release: extensive plain-language comments across all original Python files and launch scripts, plus a [code-reading guide](CODE-READING-GUIDE.md) and [GPLv3 release plan](LICENSING-PLAN.md). All 28 executable Python syntax trees and non-comment launcher lines match v0.4.24; 73 Python tests passed. The tester website and formal project license are unchanged. See COMMENTING-VERIFICATION.json for the recorded comparison.

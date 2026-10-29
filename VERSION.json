@@ -1,6 +1,6 @@
 {
-  "version": "0.4.26",
-  "change": "Persistent connectivity and temperature indicators; low-memory and hardware warnings",
+  "version": "0.4.27",
+  "change": "Move idle status strip upward while retaining active-control placement",
   "files": {
     "AIRPORT-REFERENCE.md": "eeed71413e46c047122cfdcb19d352f6d9e0f3b902a770a9e170ee623c04e0f0",
     "CODE-READING-GUIDE.md": "50c36f2affb8722bd332ffaccce880e7a2465a928c1a6e43753372194794e143",
@@ -15,7 +15,7 @@
     "MAP-DEMO.md": "99d852ea12945daf9e47996fa57c723f04be495aedba4b09f2440161bd68a599",
     "MAP-STORAGE-NOTES.md": "cf5ec8e7d0d254e26d8216236d52becb345564f7c29e8c827f93ac60d58f337d",
     "PI-STARTUP.md": "b8a077ca35a0e883f8a587117288e35fcf703f180ed1724deeadb61198565863",
-    "README.md": "32d4a9c706d7a55952bd46cf6f870589ce1c963833af3ef5e6f203f58e283b75",
+    "README.md": "8a92b7743551c06962de1e53c4df86357f7d26abe9668f2c2ae2cf3d854cc705",
     "RELEASE-0.4.15.md": "32ae923c3835327752409dc6ff93cd6c641d1d9ab64067084aa504ac59a489a0",
     "RELEASE-AND-MAPS.md": "99d2967d897411b742944b3b81eca2fe23a757fc3c77398f33c71869adc15ff4",
     "RICH-MAP.md": "bc827578620a702b3f442e726f1ac821d04888d44ba9e489fcadde9a166dfbf4",
@@ -54,7 +54,7 @@
     "test_tile_ground.py": "5e761ad91787c7e395325b2ead4c1d009cb747fa6c3fac432313ac14a5fdd149",
     "test_world_ground.py": "efdd7044ddaca10ab9f7cdaf6098479df47a473b3475a43005701cb70b5af4f6",
     "tile_ground.py": "a272d83069440d29c7eddb89b6da47bda9f0feacdc40f8f2e8c88c2dcd99688a",
-    "traffic_display.py": "4c351e538b6c3123fad6dff5c455893141bb2bd8c5965c73917f32175b312511",
+    "traffic_display.py": "ab73d0be19c192588c49a3b1458e89e36e6d72177ef574b4fd0664973ab7b417",
     "update_airports.py": "40f4de02f4e1a8aab4779c791fe823b1cd9109581488d5753c1d120d24873d70",
     "vendor_pmtiles/LICENSE": "0371c38f338835f7fc13ed71176f3d92144e22c8b736a31cced57adbbeb647b3",
     "vendor_pmtiles/README.md": "331e582125df30be409c336436af03078cdb837c616c7ee15d5ee42a1067eb51",
