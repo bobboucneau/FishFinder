@@ -15,3 +15,11 @@ Database read failures and known startup write-permission failures remain visibl
 Focused tests: python3 -m unittest -v test_system_health . These eight tests use fixed/mocked inputs, no data download and no large allocations. Do not use an unrestricted test discovery run on the memory-constrained Pi until the earlier download-heavy validation issue is resolved. Mac layout checked with the production Tk renderer; actual Pi touch and operational status transition checks remain required before claiming hardware validation.
 
 Install using the existing version-folder procedure, retaining settings.json and the external map file. For the current prototype, the supplied activate-fishfinder-v0.4.26.bash switches the demo collector and launches the round display. v0.4.25 remains available for rollback. No startup/network selection changes and no web-demo changes are included.
+
+## v0.4.28 display refinements
+
+Screen sleep lives on Setup's Receiver / Updates page to keep the Display page from overcrowding. Choices: never (default), 5, 10, 20, 30 or 60 minutes. Startup and saving settings apply X11 screensaver/DPMS preferences to the current session using xset, from a background thread with bounded subprocess timeouts. This is distinct from Hide controls. Requires X11/xset; unsupported environments log that the setting was not applied.
+
+The entire status strip is centered using actual Tk font widths, including DEMO labels. Urgent warnings appear immediately below. Any red indicator or warning draws the outermost ring red, returning to normal on recovery. Airport visibility remains in Setup; its early-testing main-screen button is removed.
+
+Validation: 11 focused health/display tests on Mac, plus native Tk layout inspection; Pi-focused tests and xset query are checked during staging. No web release or network/startup workflow changes.

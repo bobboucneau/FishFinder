@@ -1,6 +1,6 @@
 {
-  "version": "0.4.27",
-  "change": "Move idle status strip upward while retaining active-control placement",
+  "version": "0.4.28",
+  "change": "Configurable screen sleep defaults to Never; centered status and warning ring refinements",
   "files": {
     "AIRPORT-REFERENCE.md": "eeed71413e46c047122cfdcb19d352f6d9e0f3b902a770a9e170ee623c04e0f0",
     "CODE-READING-GUIDE.md": "50c36f2affb8722bd332ffaccce880e7a2465a928c1a6e43753372194794e143",
@@ -15,7 +15,7 @@
     "MAP-DEMO.md": "99d852ea12945daf9e47996fa57c723f04be495aedba4b09f2440161bd68a599",
     "MAP-STORAGE-NOTES.md": "cf5ec8e7d0d254e26d8216236d52becb345564f7c29e8c827f93ac60d58f337d",
     "PI-STARTUP.md": "b8a077ca35a0e883f8a587117288e35fcf703f180ed1724deeadb61198565863",
-    "README.md": "8a92b7743551c06962de1e53c4df86357f7d26abe9668f2c2ae2cf3d854cc705",
+    "README.md": "8caab8d4a84c0551758aa48a0d62777181b2c75cd698bbe6168be5dc148085ac",
     "RELEASE-0.4.15.md": "32ae923c3835327752409dc6ff93cd6c641d1d9ab64067084aa504ac59a489a0",
     "RELEASE-AND-MAPS.md": "99d2967d897411b742944b3b81eca2fe23a757fc3c77398f33c71869adc15ff4",
     "RICH-MAP.md": "bc827578620a702b3f442e726f1ac821d04888d44ba9e489fcadde9a166dfbf4",
@@ -42,8 +42,8 @@
     "preview-runways.png": "9ccfae5656c744d7e588a3a9184eecd1d7a7b1b612065b7e506ff73ae3941b93",
     "preview-splash.png": "74be3b4370e7dd96634df22fdc1c59eeaa3406d149a60789eebf503742b5aeb2",
     "preview-track-up.png": "55ef79713eb62bc6b44164b5a36f2f082af468666c6cc9fbabc9b133cd6e77a1",
-    "settings.py": "20c48cb6696ef29456dda8c3118fcdaa9dd8e3ef4f2f51988cdbb2fcbde96056",
-    "setup_screen.py": "e3033357057c619c995624c11d6a9c4095077b4833e0b3424729de0901ed4e4f",
+    "settings.py": "4754e5f19a02a9255f11bc32c6e130a5f281e8bf52ad28c566ba7824e72cb036",
+    "setup_screen.py": "f9eb68ea347b64584e2dcc699e0a77d1d5652e71dec46159cc36a88b0b106af2",
     "test_airport_reference.py": "2eb0ff7ae0e3c67db0d6d6246699e1bffe9cbaa4906210fdcafb02873947a818",
     "test_airports.py": "6a6c2df0ac3550922b0c1caf9ae8ef1eadbb84a5f3b00f3b523d2f39b450968c",
     "test_demo_ground.py": "b5d2d314128f5cf0791de0b8a85137445af0dc974a964d7cbac5a1e25b932cc2",
@@ -54,7 +54,7 @@
     "test_tile_ground.py": "5e761ad91787c7e395325b2ead4c1d009cb747fa6c3fac432313ac14a5fdd149",
     "test_world_ground.py": "efdd7044ddaca10ab9f7cdaf6098479df47a473b3475a43005701cb70b5af4f6",
     "tile_ground.py": "a272d83069440d29c7eddb89b6da47bda9f0feacdc40f8f2e8c88c2dcd99688a",
-    "traffic_display.py": "ab73d0be19c192588c49a3b1458e89e36e6d72177ef574b4fd0664973ab7b417",
+    "traffic_display.py": "ef42710ccec399e01cd65b477fc5f748e29b84edb3bdab6831d4c85a376ca3da",
     "update_airports.py": "40f4de02f4e1a8aab4779c791fe823b1cd9109581488d5753c1d120d24873d70",
     "vendor_pmtiles/LICENSE": "0371c38f338835f7fc13ed71176f3d92144e22c8b736a31cced57adbbeb647b3",
     "vendor_pmtiles/README.md": "331e582125df30be409c336436af03078cdb837c616c7ee15d5ee42a1067eb51",
@@ -64,6 +64,8 @@
     "world_ground.py": "92ae01844e9aa04ac935133e5089c6b6db85c03fe5b7dbf77b82757fc3e7ec09",
     "system_health.py": "31e3c5f1f113649b51ef9e22228c2d1de2b894486398d437fc19bcd23b94fa2a",
     "test_system_health.py": "f8bae96560b5b3d51fba63c74612b2642d7012d03948e42edae593fee032a567",
-    "STATUS-INDICATORS.md": "1422ceafb80cb1806d143e8ea9f561f059deab43e81b77027da3f70ab173685d"
+    "STATUS-INDICATORS.md": "cb2099ecf36d2062c5d03be8069c38c031ebb596c11b3099ded34ee742618c6b",
+    "screen_sleep.py": "cb8bfe14cfec13d0455cad0e30ce9362eed987833d619f7b6b96b41251f814b9",
+    "test_screen_sleep.py": "9b432123a24d74bf8e97cc03ac4c3dd5feb76a6651af890daf87602ce42f9c6d"
   }
 }

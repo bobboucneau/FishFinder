@@ -1,3 +1,5 @@
+v0.4.28 adds Screen sleep (Never by default) under Setup → Receiver / Updates, centers the status group using measured text widths, places warning-only faults below it and makes the outer ring red for red system faults. The main Airports toggle is removed; Show airports remains in Setup.
+
 v0.4.27 moves the status strip toward the top of the round display in idle mode; its position with controls visible is unchanged.
 
 v0.4.26 adds persistent Stratux/GPS/Temp indicators and warning-only memory, power/throttling and database-access messages. Hardware probes run every five seconds in a background thread. Demo connection indicators explicitly say DEMO. See [STATUS-INDICATORS.md](STATUS-INDICATORS.md).

@@ -55,9 +55,9 @@ class Setup:
         fields=([('default_range','Range (NM)'),('label_size','Label size'),('orientation','Map orientation'),('ownship_symbol','Ownship airplane'),
                  ('horizon_minutes','Projection (minutes)'),('idle_seconds','Hide controls (seconds)'),('trail_seconds','Trail (seconds)')]
                 if index==0 else [('stratux_ip','Stratux IP'),('own_tail','Your tail number'),
-                                  ('ownship_source','Ownship preference'),('vertical_threshold_ft','Altitude limit (feet)')])
+                                  ('ownship_source','Ownship preference'),('vertical_threshold_ft','Altitude limit (feet)'),('screen_sleep','Screen sleep (minutes)')])
         form=tk.Frame(self.page,bg=BG);form.pack()
-        choices={'label_size':('normal','large','extra-large'),'default_range':('2','5','10','20'),'orientation':('track-up','north-up'),
+        choices={'screen_sleep':('never','5','10','20','30','60'),'label_size':('normal','large','extra-large'),'default_range':('2','5','10','20'),'orientation':('track-up','north-up'),
                  'ownship_symbol':('high-wing','low-wing','twin'),'ownship_source':('adsb-first','stratux-first')}
         for row,(key,label) in enumerate(fields):
             tk.Label(form,text=label,bg=BG,fg=FG,font=('DejaVu Sans',10)).grid(row=row,column=0,sticky='w',pady=2)

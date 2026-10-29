@@ -423,6 +423,8 @@ class Display:
         # Load validated settings once for this window. self.config holds the choices;
         # self.radius_nm and similar fields hold the currently applied display state.
         self.config=settings.load()
+        import screen_sleep
+        screen_sleep.apply(self.config["screen_sleep"])
         try:self.version=json.loads((Path(__file__).resolve().parent/'VERSION.json').read_text())['version']
         except (OSError,ValueError,KeyError):self.version='unknown'
         # Check permissions under the real current user. Report trouble in Setup; do not make
@@ -492,16 +494,30 @@ class Display:
         # Idle mode frees the header area. At y=62 the entire strip still fits
         # inside the circular panel; the normal control layout stays unchanged.
         status_y=62 if self.idle else 143
-        self.rect(235,status_y-11,565,status_y+12,fill=BG,outline='')
-        for x,(label,state) in zip((245,355,445),states):
+        # Measure the actual labels (DEMO and temperature widths vary) and center
+        # the complete group, rather than centering three arbitrary fixed slots.
+        from tkinter import font as tkfont
+        font=tkfont.Font(root=self.root,font=('DejaVu Sans',max(9,int(9*self.unit))))
+        widths=[13+font.measure(label)/self.unit for label,_ in states]
+        gap=14;left=400-(sum(widths)+gap*(len(states)-1))/2
+        self.rect(left-8,status_y-11,800-left+8,status_y+12,fill=BG,outline='')
+        x=left+4
+        for width,(label,state) in zip(widths,states):
             cx=self.cx+(x-400)*self.unit;cy=self.cy+(status_y-400)*self.unit
             self.canvas.create_oval(cx-4*self.unit,cy-4*self.unit,cx+4*self.unit,cy+4*self.unit,
                                     fill=colors[state],outline='')
             self.text(x+9,status_y,label,fill=colors[state],size=9,anchor='w')
+            x+=width+gap
         if snap.error:warnings.insert(0,('Storage / database unavailable','red'))
         elif self.permission_issues:warnings.insert(0,('Write access · see Setup','amber'))
+        # Red hardware/database faults are included even when they have no
+        # permanently visible status dot. Only the outer ring changes color.
+        if any(state=='red' for _,state in states+warnings):
+            radius=398*self.unit
+            self.canvas.create_oval(self.cx-radius,self.cy-radius,self.cx+radius,self.cy+radius,
+                                    outline=RED,width=2*self.unit)
         for index,(label,state) in enumerate(warnings[:4]):
-            y=558+index*21
+            y=status_y+25+index*21
             self.rect(205,y-10,595,y+10,fill=BG,outline='')
             self.text(400,y,label,fill=colors[state],size=10)
 
@@ -838,10 +854,6 @@ class Display:
         self.text(400,68,'FISHFINDER'+(' · DEMO' if snap.demo or (snap.receiver and snap.receiver[2].startswith('DEMO:')) else ''),size=17)
         self.text(400,96,mode,fill=WHITE if fix else YELLOW,size=12)
         self.text(400,119,f'{self.config["horizon_minutes"]} min · purple dashed = estimated · gray = distant',fill=MUTED,size=10)
-        self.rect(318,158,482,185,fill='#10253d',outline=BLUE)
-        airport_status='Airports unavailable' if self.catalog.error else 'Airports ON' if self.airports_visible else 'Airports OFF'
-        self.text(400,171,airport_status,fill=BLUE,size=10)
-        self.buttons.append((318,158,482,185,self.toggle_airports))
         if self.ground and ground_allowed:
             self.rect(318,226,482,257,fill='#10251f',outline='#345247')
             self.text(400,242,'Map '+('OFF','LOW','NORMAL')[self.ground_level],size=11)
@@ -1121,6 +1133,8 @@ class Display:
     def apply_settings(self,values):
         previous_map=self.config['ground_map']
         self.config=settings.save(values)
+        import screen_sleep
+        screen_sleep.apply(self.config["screen_sleep"])
         if self.config['ground_map']!=previous_map or not self.config['ground_map']:
             self.ground_level=1 if self.config['ground_map'] else 0
             if not self.config['ground_map'] and self.ground:

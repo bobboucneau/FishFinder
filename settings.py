@@ -20,7 +20,7 @@ import tempfile
 
 # These defaults are also used by Restore defaults. Adding a preference here gives older
 # settings files a compatible value; validate() and Setup must understand the same key.
-DEFAULTS = dict(label_size='normal', runway_extensions=True, stratux_ip='192.168.10.1', own_tail='', default_range=10,
+DEFAULTS = dict(screen_sleep='never', label_size='normal', runway_extensions=True, stratux_ip='192.168.10.1', own_tail='', default_range=10,
                 idle_seconds=10, vertical_threshold_ft=5000, vertical_filter=True, hide_vertical=False,
                 horizon_minutes=2, orientation='track-up', ownship_symbol='high-wing', ownship_source='adsb-first', airports_visible=True, ground_map=False, trail_seconds=300)
 SETTINGS_PATH = Path(os.environ.get('FISHFINDER_SETTINGS', str(Path(__file__).resolve().parent/'settings.json')))
@@ -44,6 +44,7 @@ def validate(values):
         if isinstance(raw,bool) or float(raw)!=int(raw): raise ValueError(f'{key}: use a whole number')
         result[key]=int(raw)
         if not low<=result[key]<=high: raise ValueError(f'{key}: choose {low} to {high}')
+    if result['screen_sleep'] not in ('never','5','10','20','30','60'):raise ValueError('Screen sleep: choose never or 5/10/20/30/60 minutes')
     if result['label_size'] not in ('normal','large','extra-large'):raise ValueError('Label size: choose normal, large or extra-large')
     if result['orientation'] not in ('track-up','north-up'):raise ValueError('Orientation: choose track-up or north-up')
     if result['ownship_symbol'] not in ('high-wing','low-wing','twin'):raise ValueError('Ownship airplane: choose high-wing, low-wing or twin')
