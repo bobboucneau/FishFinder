@@ -1,0 +1,5 @@
+# Versions installed and tested in the prototype user-owned runtime.
+cryptography==50.0.2
+websocket-client==1.9.2
+cffi==2.1.1
+pycparser==3.12

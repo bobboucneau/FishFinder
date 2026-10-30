@@ -225,3 +225,7 @@ tests. Record what behavior changed; do not hide a logic change among comments.
 ## Named networks (v0.4.29)
 
 Read NETWORKS.md, then network_manager.py for the connection policy and network_screen.py for the touch workflow. The collector uses receiver_allowed() to prevent accepting a different access point after enrollment. Passwords belong to NetworkManager; profile JSON contains no credentials.
+
+## Stable launcher and owner releases (v0.4.30)
+
+Start with OWNER-BUILDS.md. release_manager.py checks and stages packages; release_tools.py exposes explicit owner commands; build_release.py makes reproducible packages from the source allowlist. bootstrap.py is the stable launcher and approval/progress UI. configure_bootstrap.py is the separate one-time administrator boundary. Ordinary app updates do not replace the bootstrap.

@@ -1,9 +1,9 @@
 {
-  "version": "0.4.29",
-  "change": "Named BSSID Wi-Fi chooser, independent capability probes and guarded receiver reconnect",
+  "version": "0.4.30",
+  "change": "Stable appliance bootstrap, approved non-root updates, signed verification and documented owner builds",
   "files": {
     "AIRPORT-REFERENCE.md": "eeed71413e46c047122cfdcb19d352f6d9e0f3b902a770a9e170ee623c04e0f0",
-    "CODE-READING-GUIDE.md": "f69434cd3eb1b912d90051dd4251acff6e29a2f101a6a50ddf83055942ca15a3",
+    "CODE-READING-GUIDE.md": "c876b78171aa1bd7a85be4bd99b823a98db248d8c6b75eb32ff628dc121cda37",
     "COLLECTOR-NOTES.md": "8559bf93c9104426d951306f6ef1ec9aad114a820aa1c19abcdf40240faa7b65",
     "COMMENTING-VERIFICATION.json": "25a989837df974c2aa491a2e1e387c657d3aa0851d214da9deb7926dd6b87a99",
     "DemoDisplay.bash": "ed4b6fce6776b6827487af841c67b743415d3dacfa49593c982c11b7c3c94544",
@@ -15,7 +15,7 @@
     "MAP-DEMO.md": "99d852ea12945daf9e47996fa57c723f04be495aedba4b09f2440161bd68a599",
     "MAP-STORAGE-NOTES.md": "cf5ec8e7d0d254e26d8216236d52becb345564f7c29e8c827f93ac60d58f337d",
     "PI-STARTUP.md": "b8a077ca35a0e883f8a587117288e35fcf703f180ed1724deeadb61198565863",
-    "README.md": "7d13d1bc610cfd2f1d83ac27c3b15292be6a4c1013b234a6485d28e44c2dc015",
+    "README.md": "4eb2adf85d56269a2f631fb5ba3739323cecbf9e9cdcae7541fb81f32a50b536",
     "RELEASE-0.4.15.md": "32ae923c3835327752409dc6ff93cd6c641d1d9ab64067084aa504ac59a489a0",
     "RELEASE-AND-MAPS.md": "99d2967d897411b742944b3b81eca2fe23a757fc3c77398f33c71869adc15ff4",
     "RICH-MAP.md": "bc827578620a702b3f442e726f1ac821d04888d44ba9e489fcadde9a166dfbf4",
@@ -43,7 +43,7 @@
     "preview-splash.png": "74be3b4370e7dd96634df22fdc1c59eeaa3406d149a60789eebf503742b5aeb2",
     "preview-track-up.png": "55ef79713eb62bc6b44164b5a36f2f082af468666c6cc9fbabc9b133cd6e77a1",
     "settings.py": "4754e5f19a02a9255f11bc32c6e130a5f281e8bf52ad28c566ba7824e72cb036",
-    "setup_screen.py": "c2fde3dad982c58674ea16bd2c63256302707ba3a5b88f4d136ecaca77eed535",
+    "setup_screen.py": "2068a7c4e97e984d5e50dca9491e21c9b66cca7a9ecfad6cd98fca2d0fa60a5b",
     "test_airport_reference.py": "2eb0ff7ae0e3c67db0d6d6246699e1bffe9cbaa4906210fdcafb02873947a818",
     "test_airports.py": "6a6c2df0ac3550922b0c1caf9ae8ef1eadbb84a5f3b00f3b523d2f39b450968c",
     "test_demo_ground.py": "b5d2d314128f5cf0791de0b8a85137445af0dc974a964d7cbac5a1e25b932cc2",
@@ -54,7 +54,7 @@
     "test_tile_ground.py": "5e761ad91787c7e395325b2ead4c1d009cb747fa6c3fac432313ac14a5fdd149",
     "test_world_ground.py": "efdd7044ddaca10ab9f7cdaf6098479df47a473b3475a43005701cb70b5af4f6",
     "tile_ground.py": "a272d83069440d29c7eddb89b6da47bda9f0feacdc40f8f2e8c88c2dcd99688a",
-    "traffic_display.py": "c248d0a8ccfbae7b3af22e72a8f2f9cc99fff5752847b1b764f25562efdd0385",
+    "traffic_display.py": "a863a4f82a95ce00f5b5ba027aa5df9de3c0fa053d66e5d6478b1a499841ee58",
     "update_airports.py": "40f4de02f4e1a8aab4779c791fe823b1cd9109581488d5753c1d120d24873d70",
     "vendor_pmtiles/LICENSE": "0371c38f338835f7fc13ed71176f3d92144e22c8b736a31cced57adbbeb647b3",
     "vendor_pmtiles/README.md": "331e582125df30be409c336436af03078cdb837c616c7ee15d5ee42a1067eb51",
@@ -70,6 +70,15 @@
     "network_manager.py": "a836ee83cebe10c08ac1ed2010fbf41d07f4c2a2e8f9895a3a15d61802774d9c",
     "network_screen.py": "2af3e13dd43bee15e6793d42cbac48fda4c03b5871892bc4ccfeb61b49e90a77",
     "test_network_manager.py": "7b7114450ceaac2bae674b4c4c457f9169174d9d954349d5ee4121e824318f40",
-    "NETWORKS.md": "400562abaf2dc57ddd32a3731cc389ab5371715ca3788ce33edf814673c1cdd7"
+    "NETWORKS.md": "400562abaf2dc57ddd32a3731cc389ab5371715ca3788ce33edf814673c1cdd7",
+    "release_manager.py": "f61a94945dc3e980efca147b1eda66fe72ea2a1eecf8dfe8df6cd8b0eac6b7d1",
+    "release_tools.py": "7281c29cc0cfd99345bba190a01de1a8657882f9600c3ff1ccff0409e4ee913e",
+    "build_release.py": "20416c96734a81a046f39704cd70a673917838baa414859e839505cf105024fe",
+    "bootstrap.py": "ae7facf0c402abcfbece245fdd31b5253f344db28ff51e150ba0f0f37cc7050e",
+    "configure_bootstrap.py": "b5d99ec484414e765b25b597a9d1322cdf2a1568849ce1b4519fbfdbc4e8a89e",
+    "update_screen.py": "ee5e1138717f68f7c4f1626bbdee327d3b32f1f44fdd6cfd59ac708ae5984e70",
+    "test_release_manager.py": "ef87eaef511604ef8e7a57ccc118158ea5c0bfef274c999e6c133a27e63db23e",
+    "OWNER-BUILDS.md": "d5e33c44e2d7f2be38d18088988ec401a9ac1b039c7f23989ad494b4c869c5f1",
+    "requirements-bootstrap.txt": "c68d42b4f3bc37d60a78625963dc0114873f30e98b078d599a91bc6038681cc4"
   }
 }

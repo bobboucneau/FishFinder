@@ -20,3 +20,6 @@ ne_10m_*.zip
 networks.json
 network-session.json
 airports.update.lock
+
+# Never commit publisher private signing keys.
+*-private.pem

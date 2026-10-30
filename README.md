@@ -1,3 +1,5 @@
+v0.4.30 introduces an opt-in stable appliance bootstrap, startup progress, signature-verified/explicit owner-build staging, on-screen install timing and startup-trial rollback. One-time migration uses sudo; subsequent app updates do not. No publisher key or release server is silently configured. Read [OWNER-BUILDS.md](OWNER-BUILDS.md) before migration.
+
 v0.4.29 adds named Wi-Fi/BSSID selection, preferred receiver handling, independent receiver/Internet/update probes, duplicate-name replacement and selected-only reconnect. Live startup offers the chooser; demo startup leaves networking alone. Airport downloads are manual only. See [NETWORKS.md](NETWORKS.md) for behavior, permissions and hardware-test limits.
 
 v0.4.28 adds Screen sleep (Never by default) under Setup → Receiver / Updates, centers the status group using measured text widths, places warning-only faults below it and makes the outer ring red for red system faults. The main Airports toggle is removed; Show airports remains in Setup.

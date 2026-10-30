@@ -437,6 +437,7 @@ class Display:
         if self.touch_debug:print(f"TOUCH DEBUG script={Path(__file__).resolve()} DISPLAY={os.environ.get('DISPLAY','')} requested_geometry={args.geometry}",flush=True)
         self.setup_panel=None; self.update_status=''
         self.network_panel=None;self.network_manager=None;self.network_startup_done=False
+        self.heartbeat_last=0
         global TRAIL_AGE
         self.projection_seconds=self.config['horizon_minutes']*60
         TRAIL_AGE=self.config['trail_seconds']
@@ -481,6 +482,20 @@ class Display:
             self.worker.start()
         self.splash_until=time.monotonic()+getattr(args,"splash_seconds",0)
         self.tick()
+
+    def report_heartbeat(self):
+        # The stable launcher checks that frames are still reaching the Tk event
+        # loop. Disk I/O happens on a short-lived worker, never in the touch loop.
+        path=os.environ.get('FISHFINDER_HEARTBEAT')
+        now=time.monotonic()
+        if not path or now-self.heartbeat_last<5:return
+        self.heartbeat_last=now
+        def write():
+            try:
+                from release_manager import atomic
+                atomic(path,dict(release=os.environ.get('FISHFINDER_RELEASE_ID'),monotonic=now))
+            except OSError:pass
+        threading.Thread(target=write,daemon=True,name='display-heartbeat').start()
 
     def draw_system_status(self, fix, now):
         # A compact strip stays inside the round panel and visible in idle mode.
@@ -637,6 +652,7 @@ class Display:
                 if not getattr(self.args,'moving_demo',False) and not self.args.demo:
                     import network_screen
                     self.network_panel=network_screen.NetworkScreen(self,startup=True)
+        self.report_heartbeat()
         # Schedule the next update and return control to Tkinter. Returning is what allows
         # queued touch/button events to run between frames.
         self.root.after(FRAME_MS,self.tick)
@@ -931,7 +947,7 @@ class Display:
         attribution=''
         if not self.airport_selected and self.ground and ground_allowed and self.ground_level:
             attribution='Natural Earth' if self.ground_global and self.ground_path.suffix=='.sqlite' else 'Map data © OpenStreetMap contributors'
-        self.rim_attribution('v'+self.version+(' · '+attribution if attribution else ''))
+        self.rim_attribution('v'+self.version+(' · OWNER BUILD' if os.environ.get('FISHFINDER_OWNER_BUILD')=='1' else '')+(' · '+attribution if attribution else ''))
         if not self.airport_selected:self.rim_attribution('© 2026 FishFinder',3*math.pi/4)
         if self.touch_debug and self.touch_mark and time.monotonic()-self.touch_mark[2]<3:
             tx,ty,_=self.touch_mark

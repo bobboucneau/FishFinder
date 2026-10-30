@@ -135,7 +135,8 @@ class Setup:
         self.display.network_panel=network_screen.NetworkScreen(self.display)
 
     def code_updates(self):
-        self.status.set('No code release server is configured yet. Recommended: versioned GitHub Releases with verified downloads and rollback. This button will not install unverified code.')
+        import update_screen
+        update_screen.open_updates(self.display)
 
     def refresh(self):
         if self.busy:return
