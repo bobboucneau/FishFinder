@@ -84,7 +84,9 @@ def main():
     if account.pw_uid==0:parser.error('Choose a normal user')
     home=Path(account.pw_dir);base=home/'.local/share/FishFinder'
     database=Path('/var/local/FishFinder')/('demo_objects.db' if args.demo else 'flying_objects.db')
-    unit,session=files_for(args.user,home,args.python.resolve(),database,args.demo)
+    # Preserve the venv symlink path: resolving it selects system Python and
+    # loses the environment's installed packages. Absolute does not mean resolved.
+    unit,session=files_for(args.user,home,Path(os.path.abspath(args.python)),database,args.demo)
     if not args.install:
         print(unit);print(session);print('Preview only. One-time --install needs sudo on the Pi.');return
     if platform.system()!='Linux' or os.geteuid()!=0:parser.error('--install requires sudo on the Pi')

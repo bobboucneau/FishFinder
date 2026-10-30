@@ -164,4 +164,14 @@ class ReleaseTests(unittest.TestCase):
         with zipfile.ZipFile(built) as z:self.assertFalse(any(name.endswith('/settings.json') for name in z.namelist()))
         with self.assertRaisesRegex(ValueError,'private'):build_release.build(source,'bad',1,self.base/'out',['settings.json'])
 
+    def test_venv_symlink_path_is_preserved(self):
+        import os
+        link=self.base/'venv/bin/python3';link.parent.mkdir(parents=True)
+        link.symlink_to('/usr/bin/python3')
+        _,script=installer.files_for('fish',Path('/home/fish'),Path(os.path.abspath(link)),Path('/var/local/FishFinder/demo_objects.db'),True)
+        self.assertIn(str(link),script)
+        self.assertNotIn('exec /usr/bin/python3 ',script)
+        # Check the installer entry point uses the same non-resolving conversion.
+        self.assertNotIn('args.python.resolve()',Path(installer.__file__).read_text())
+
 if __name__=='__main__':unittest.main()

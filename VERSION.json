@@ -75,9 +75,9 @@
     "release_tools.py": "7281c29cc0cfd99345bba190a01de1a8657882f9600c3ff1ccff0409e4ee913e",
     "build_release.py": "20416c96734a81a046f39704cd70a673917838baa414859e839505cf105024fe",
     "bootstrap.py": "ae7facf0c402abcfbece245fdd31b5253f344db28ff51e150ba0f0f37cc7050e",
-    "configure_bootstrap.py": "b5d99ec484414e765b25b597a9d1322cdf2a1568849ce1b4519fbfdbc4e8a89e",
+    "configure_bootstrap.py": "e3f14ae77ab1dcda7e2f340ded8572dc8c6583f1954b1d8772dc393f9ae3656d",
     "update_screen.py": "ee5e1138717f68f7c4f1626bbdee327d3b32f1f44fdd6cfd59ac708ae5984e70",
-    "test_release_manager.py": "ef87eaef511604ef8e7a57ccc118158ea5c0bfef274c999e6c133a27e63db23e",
+    "test_release_manager.py": "715ef0e2cf84dc116a8e35909940f487d7df25762778f2eba1a1f6ae08b97f8a",
     "OWNER-BUILDS.md": "d5e33c44e2d7f2be38d18088988ec401a9ac1b039c7f23989ad494b4c869c5f1",
     "requirements-bootstrap.txt": "c68d42b4f3bc37d60a78625963dc0114873f30e98b078d599a91bc6038681cc4"
   }
