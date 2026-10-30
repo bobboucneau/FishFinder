@@ -436,6 +436,7 @@ class Display:
         self.touch_debug=getattr(args,"touch_debug",False);self.touch_mark=None
         if self.touch_debug:print(f"TOUCH DEBUG script={Path(__file__).resolve()} DISPLAY={os.environ.get('DISPLAY','')} requested_geometry={args.geometry}",flush=True)
         self.setup_panel=None; self.update_status=''
+        self.network_panel=None;self.network_manager=None;self.network_startup_done=False
         global TRAIL_AGE
         self.projection_seconds=self.config['horizon_minutes']*60
         TRAIL_AGE=self.config['trail_seconds']
@@ -444,7 +445,9 @@ class Display:
         self.exit_pending=False
         self.catalog=AirportCatalog(args.airports)
         from update_airports import AutomaticUpdates
-        self.airport_updates=None if args.demo else AutomaticUpdates(args.airports)
+        # Internet availability enables manual updates; never start a data
+        # download automatically during flight or a receiver connection check.
+        self.airport_updates=None
         self.airport_selected=None; self.airport_runways=False; self.airport_page=0
         self.airports_visible=self.config['airports_visible']; self.airport_hits=[]; self.airport_buttons=[]
         self.airport_query=None; self.airport_query_time=0.0; self.near_airports=[]
@@ -497,8 +500,12 @@ class Display:
         # Measure the actual labels (DEMO and temperature widths vary) and center
         # the complete group, rather than centering three arbitrary fixed slots.
         from tkinter import font as tkfont
-        font=tkfont.Font(root=self.root,font=('DejaVu Sans',max(9,int(9*self.unit))))
-        widths=[13+font.measure(label)/self.unit for label,_ in states]
+        try:
+            font=tkfont.Font(root=self.root,font=('DejaVu Sans',max(9,int(9*self.unit))))
+            widths=[13+font.measure(label)/self.unit for label,_ in states]
+        except (tk.TclError,AttributeError,TypeError):
+            # Non-window renderers can still draw a legible approximate strip.
+            widths=[13+len(label)*6 for label,_ in states]
         gap=14;left=400-(sum(widths)+gap*(len(states)-1))/2
         self.rect(left-8,status_y-11,800-left+8,status_y+12,fill=BG,outline='')
         x=left+4
@@ -621,7 +628,15 @@ class Display:
             self.demo_initialized=True
         if time.monotonic()<self.splash_until:
             draw_splash(self.canvas,self.canvas.winfo_width(),self.canvas.winfo_height())
-        else:self.draw()
+        else:
+            self.draw()
+            # Demo startup keeps the bench connection untouched. Live startup
+            # presents saved-device selection after the splash exactly once.
+            if not self.network_startup_done:
+                self.network_startup_done=True
+                if not getattr(self.args,'moving_demo',False) and not self.args.demo:
+                    import network_screen
+                    self.network_panel=network_screen.NetworkScreen(self,startup=True)
         # Schedule the next update and return control to Tkinter. Returning is what allows
         # queued touch/button events to run between frames.
         self.root.after(FRAME_MS,self.tick)
@@ -1324,6 +1339,7 @@ def main():
     # User-facing --demo means 'read the separate moving-demo database'. The
     # older internal args.demo field instead means 'make fixed sample objects'.
     # Keep this translation here so the rest of Display sees the legacy meaning.
+    args.moving_demo=args.demo
     args.demo=args.sample_demo
     import signal
     root=tk.Tk();display=Display(root,args)

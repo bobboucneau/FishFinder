@@ -15,3 +15,8 @@ settings.json
 world-map-experiment/
 world-map-source/
 ne_10m_*.zip
+
+# Local network associations and temporary runtime locks. Passwords stay in NM.
+networks.json
+network-session.json
+airports.update.lock

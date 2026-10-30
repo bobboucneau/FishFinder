@@ -1,3 +1,5 @@
+v0.4.29 adds named Wi-Fi/BSSID selection, preferred receiver handling, independent receiver/Internet/update probes, duplicate-name replacement and selected-only reconnect. Live startup offers the chooser; demo startup leaves networking alone. Airport downloads are manual only. See [NETWORKS.md](NETWORKS.md) for behavior, permissions and hardware-test limits.
+
 v0.4.28 adds Screen sleep (Never by default) under Setup → Receiver / Updates, centers the status group using measured text widths, places warning-only faults below it and makes the outer ring red for red system faults. The main Airports toggle is removed; Show airports remains in Setup.
 
 v0.4.27 moves the status strip toward the top of the round display in idle mode; its position with controls visible is unchanged.

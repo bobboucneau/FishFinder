@@ -221,3 +221,7 @@ proof of aviation accuracy, and desktop tests are not Pi hardware validation.
 
 If changing behavior later, start with the smallest relevant function and its
 tests. Record what behavior changed; do not hide a logic change among comments.
+
+## Named networks (v0.4.29)
+
+Read NETWORKS.md, then network_manager.py for the connection policy and network_screen.py for the touch workflow. The collector uses receiver_allowed() to prevent accepting a different access point after enrollment. Passwords belong to NetworkManager; profile JSON contains no credentials.

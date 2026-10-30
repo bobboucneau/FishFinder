@@ -328,7 +328,10 @@ def timestamp_fresh(value, now):
 # Build an HTTP address from the currently saved Stratux IP, so a later connection attempt
 # can use a changed setting.
 def receiver_url(path):
-    return 'http://' + settings.load()['stratux_ip'] + path
+    import network_manager
+    address=settings.load()['stratux_ip']
+    if not network_manager.receiver_allowed(address):raise OSError('Selected Stratux association unavailable')
+    return 'http://' + address + path
 
 
 # Fetch the ownship/status JSON with a timeout and check that expected Stratux fields exist.
@@ -472,7 +475,7 @@ def traffic_session_loop(stop, inbox, writer=None):
                 if writer is not None and not writer.is_alive():
                     state['local_reason']='traffic database writer stopped'; stop.set()
                 elif stop.is_set(): state['local_reason']='shutdown'
-                elif settings.load()['stratux_ip'] != address: state['local_reason']='receiver IP changed'
+                elif settings.load()['stratux_ip'] != address or not __import__('network_manager').receiver_allowed(address): state['local_reason']='receiver IP changed'
                 elif traffic_stream_idle(state['last_message'],time.monotonic(),TRAFFIC_IDLE_SECONDS):
                     state['local_reason']='traffic stream quiet; requesting a fresh connection'
                 else: continue
