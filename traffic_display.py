@@ -450,7 +450,8 @@ class Display:
         # Internet availability enables manual updates; never start a data
         # download automatically during flight or a receiver connection check.
         self.airport_updates=None
-        self.airport_selected=None; self.airport_runways=False; self.airport_page=0
+        self.airport_selected=self.config.get('manual_airport') if self.config.get('manual_airport') in self.catalog.airports else None
+        self.airport_selector=None;self.airport_runways=False;self.airport_page=0
         self.airports_visible=self.config['airports_visible']; self.airport_hits=[]; self.airport_buttons=[]
         self.airport_query=None; self.airport_query_time=0.0; self.near_airports=[]
         self.anchor=None; self.last_own=None
@@ -909,9 +910,12 @@ class Display:
             self.rect(302,631,498,657,fill='#10251f',outline='#345247')
             self.text(400,644,'Recenter traffic',size=10)
             self.buttons.append((302,631,498,657,self.recenter))
-        self.rect(318,190,482,221,fill='#10251f',outline='#345247')
-        self.text(400,205,'Setup',size=11)
-        self.buttons.append((318,190,482,221,self.open_setup))
+        self.rect(220,165,394,211,fill='#10253d',outline=BLUE)
+        self.text(307,188,'Airport',size=13)
+        self.buttons.append((220,165,394,211,self.open_airport_selector))
+        self.rect(406,165,580,211,fill='#10251f',outline='#345247')
+        self.text(493,188,'Setup',size=13)
+        self.buttons.append((406,165,580,211,self.open_setup))
         if self.idle:
             # Main overlay controls are drawn last. Remove them without affecting map graphics.
             for item in c.find_all()[overlay_start:]: c.delete(item)
@@ -1025,6 +1029,23 @@ class Display:
             occupied.append(box);count+=1
             if count>=12:break
 
+    def remember_airport(self,ident):
+        # Save only the preference; do not apply/reset range, heading or ownship.
+        if self.config.get('manual_airport','')==ident:return
+        values=dict(self.config,manual_airport=ident)
+        self.config=settings.save(values)
+
+    def choose_airport(self,ident,remember=True):
+        if ident not in self.catalog.airports:raise ValueError('Airport is not available in this cache.')
+        self.remember_airport(ident if remember else '')
+        self.airport_selected=ident;self.airport_runway_index=None
+        self.airport_page=0;self.airport_runways=False;self.selected=None;self.target_choices=[]
+
+    def open_airport_selector(self):
+        if getattr(self,'airport_selector',None):return
+        import airport_selector
+        self.airport_selector=airport_selector.Selector(self)
+
     # Toggle airport overlays and redraw. The loaded reference catalog remains available.
     def toggle_airports(self):
         self.airports_visible=not self.airports_visible;self.draw()
@@ -1033,6 +1054,7 @@ class Display:
     # move through reference data.
     def airport_action(self,action):
         if action=='close': self.airport_selected=None
+        elif action=='select':self.open_airport_selector()
         elif action.startswith('runway:'): self.airport_runway_index=int(action.split(':')[1])
         elif action=='view': self.airport_runways=not self.airport_runways;self.airport_page=0
         elif action=='next': self.airport_page+=1

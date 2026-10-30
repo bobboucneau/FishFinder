@@ -20,7 +20,7 @@ import tempfile
 
 # These defaults are also used by Restore defaults. Adding a preference here gives older
 # settings files a compatible value; validate() and Setup must understand the same key.
-DEFAULTS = dict(screen_sleep='never', label_size='normal', runway_extensions=True, stratux_ip='192.168.10.1', own_tail='', default_range=10,
+DEFAULTS = dict(manual_airport='', screen_sleep='never', label_size='normal', runway_extensions=True, stratux_ip='192.168.10.1', own_tail='', default_range=10,
                 idle_seconds=10, vertical_threshold_ft=5000, vertical_filter=True, hide_vertical=False,
                 horizon_minutes=2, orientation='track-up', ownship_symbol='high-wing', ownship_source='adsb-first', airports_visible=True, ground_map=False, trail_seconds=300)
 SETTINGS_PATH = Path(os.environ.get('FISHFINDER_SETTINGS', str(Path(__file__).resolve().parent/'settings.json')))
@@ -34,6 +34,8 @@ def validate(values):
     # application. Copy the defaults first so validating one file does not mutate the shared
     # default dictionary.
     result.update({k:v for k,v in values.items() if k in DEFAULTS})
+    result['manual_airport']=str(result['manual_airport']).strip().upper()
+    if len(result['manual_airport'])>32 or any(not (c.isascii() and (c.isalnum() or c=='-')) for c in result['manual_airport']):raise ValueError('Invalid saved airport identifier')
     result['stratux_ip'] = str(ipaddress.IPv4Address(result['stratux_ip'].strip()))
     result['own_tail'] = str(result['own_tail']).strip().upper()
     if len(result['own_tail']) > 16 or any(not (c.isalnum() or c=='-') for c in result['own_tail']):

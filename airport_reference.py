@@ -94,6 +94,9 @@ def draw(d,a):
     d.text(400,94,a['name'],size=15,width=490*d.unit)
     elevation=number(a.get('elevation_ft'))
     d.text(400,130,f'{elevation:,.0f} ft MSL · field elevation' if elevation is not None else 'Field elevation unavailable',size=12)
+    from airport_selection import navigation_text
+    import time
+    d.text(400,151,navigation_text(getattr(d,'airport_fix',None),a,time.time()),size=11,fill='#9fb8c6')
     ref=current_reference(a);tower=ref.get('tower','unknown')
     freqs=a.get('frequencies',[])
     primary='TWR' if tower=='towered' or any(radio_kind(f)=='TWR' for f in freqs) else 'CTAF' if tower=='non-towered' or any(radio_kind(f)=='CTAF' for f in freqs) else None
@@ -136,8 +139,9 @@ def draw(d,a):
 # Add navigation controls and visible source/freshness information below the diagram or data
 # page.
 def buttons(d,a):
-    d.airport_button(225,654,395,699,'Reference' if d.airport_runways else 'Radios / data','view')
-    d.airport_button(405,654,575,699,'Back to traffic','close')
+    d.airport_button(190,654,322,703,'Reference' if d.airport_runways else 'Radios / data','view')
+    d.airport_button(334,654,466,703,'Select airport','select')
+    d.airport_button(478,654,610,703,'Back to traffic','close')
     ref=a.get('reference',{})
     source=f"FAA effective {ref.get('effective')} · expires {ref.get('expires')}" if ref else 'Pattern source unavailable'
     if ref and not current_reference(a):source='FAA data expired · update airports'

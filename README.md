@@ -1,3 +1,5 @@
+v0.4.32 adds a large-touch Airport selector, remembered typed airport selection and Nearby browsing. The shared airport reference page now shows live great-circle distance in nautical miles and initial true bearing, or explicitly unavailable ownship position. Selection never moves ownship or the traffic-map center.
+
 v0.4.31 removes the main-screen Exit button for appliance operation. Escape remains a maintenance keyboard action and now requests confirmation. This patch is staged through the normal-user updater rather than replacing system services.
 
 v0.4.30 introduces an opt-in stable appliance bootstrap, startup progress, signature-verified/explicit owner-build staging, on-screen install timing and startup-trial rollback. One-time migration uses sudo; subsequent app updates do not. No publisher key or release server is silently configured. Read [OWNER-BUILDS.md](OWNER-BUILDS.md) before migration.

@@ -1,6 +1,6 @@
 {
-  "version": "0.4.31",
-  "change": "Remove touch Exit button; retain confirmed keyboard maintenance exit",
+  "version": "0.4.32",
+  "change": "Large-touch airport selector, persistent manual mode and shared live distance/true-bearing reference",
   "files": {
     "AIRPORT-REFERENCE.md": "eeed71413e46c047122cfdcb19d352f6d9e0f3b902a770a9e170ee623c04e0f0",
     "CODE-READING-GUIDE.md": "c876b78171aa1bd7a85be4bd99b823a98db248d8c6b75eb32ff628dc121cda37",
@@ -15,7 +15,7 @@
     "MAP-DEMO.md": "99d852ea12945daf9e47996fa57c723f04be495aedba4b09f2440161bd68a599",
     "MAP-STORAGE-NOTES.md": "cf5ec8e7d0d254e26d8216236d52becb345564f7c29e8c827f93ac60d58f337d",
     "PI-STARTUP.md": "b8a077ca35a0e883f8a587117288e35fcf703f180ed1724deeadb61198565863",
-    "README.md": "813fd59ebc335652d20b7431d09fcfe353ccf6d7dc4833366f0b8de8cfea22e2",
+    "README.md": "5839e910688f7bcdef79bdcf12b066edb7cbc4a8b5f63f680a16a1ca7f273f07",
     "RELEASE-0.4.15.md": "32ae923c3835327752409dc6ff93cd6c641d1d9ab64067084aa504ac59a489a0",
     "RELEASE-AND-MAPS.md": "99d2967d897411b742944b3b81eca2fe23a757fc3c77398f33c71869adc15ff4",
     "RICH-MAP.md": "bc827578620a702b3f442e726f1ac821d04888d44ba9e489fcadde9a166dfbf4",
@@ -23,7 +23,7 @@
     "TOUCH-TROUBLESHOOTING.md": "114327cf53f59b1b492dcbbe3e58e18d44b04a1d5dfc29e11e21b2e40c4b4fdb",
     "WORLD-MAP.md": "b8d2bc346da62503e7a517d39ace7f61e26851429ccf0548df3dee642bb512d1",
     "airport_data.py": "fa3dc4b4c1be30b100071d2a72bedb9954fb01309762d65e517e179176e664e2",
-    "airport_reference.py": "6c90250a8a8cbdcd45a4968857463ba3f9bd07461b78c31866713214fb8458b3",
+    "airport_reference.py": "d0702310c8abb30c3b48a9b29f476df84a1a091116e9b3ca9f470d216d3c4ecd",
     "airports.json": "6fdd9eb221810f3ebad12e269a2df4d52cf9607bdec947b53ea0fcd9c1a7082b",
     "benchmark_ground.py": "c814d2144b0c1dab463a2f85c56647a52ed3f9bafb1dddbf7fa7c3277da1bd46",
     "build_demo_ground.py": "44fb0bb087883f5dbc9296122af51161df532592e1311e9ca16c0599a8d735b2",
@@ -42,9 +42,9 @@
     "preview-runways.png": "9ccfae5656c744d7e588a3a9184eecd1d7a7b1b612065b7e506ff73ae3941b93",
     "preview-splash.png": "74be3b4370e7dd96634df22fdc1c59eeaa3406d149a60789eebf503742b5aeb2",
     "preview-track-up.png": "55ef79713eb62bc6b44164b5a36f2f082af468666c6cc9fbabc9b133cd6e77a1",
-    "settings.py": "4754e5f19a02a9255f11bc32c6e130a5f281e8bf52ad28c566ba7824e72cb036",
+    "settings.py": "c7e47b00d0c90bc7c4869d82ab713c1275505f6c35d5d0591ce9c748a2415061",
     "setup_screen.py": "2068a7c4e97e984d5e50dca9491e21c9b66cca7a9ecfad6cd98fca2d0fa60a5b",
-    "test_airport_reference.py": "2eb0ff7ae0e3c67db0d6d6246699e1bffe9cbaa4906210fdcafb02873947a818",
+    "test_airport_reference.py": "9a1da8ada24819df4db06ecc11813679803a582a986060d356b1b9d83f327124",
     "test_airports.py": "6a6c2df0ac3550922b0c1caf9ae8ef1eadbb84a5f3b00f3b523d2f39b450968c",
     "test_demo_ground.py": "b5d2d314128f5cf0791de0b8a85137445af0dc974a964d7cbac5a1e25b932cc2",
     "test_demo_launcher.py": "0bd0a4809ad52d0fae84a192dfdc9067231e6db80c9ce8a1d849bca66a1e5940",
@@ -54,7 +54,7 @@
     "test_tile_ground.py": "5e761ad91787c7e395325b2ead4c1d009cb747fa6c3fac432313ac14a5fdd149",
     "test_world_ground.py": "efdd7044ddaca10ab9f7cdaf6098479df47a473b3475a43005701cb70b5af4f6",
     "tile_ground.py": "a272d83069440d29c7eddb89b6da47bda9f0feacdc40f8f2e8c88c2dcd99688a",
-    "traffic_display.py": "7f02e64595261546d47fe9f65a1be25733ac8758d62427f01b7947f8d3be5bed",
+    "traffic_display.py": "77cacd071b7daabba2f3434d77b6d6eb65a0753b9c2add2b575a1c802ae0ea56",
     "update_airports.py": "40f4de02f4e1a8aab4779c791fe823b1cd9109581488d5753c1d120d24873d70",
     "vendor_pmtiles/LICENSE": "0371c38f338835f7fc13ed71176f3d92144e22c8b736a31cced57adbbeb647b3",
     "vendor_pmtiles/README.md": "331e582125df30be409c336436af03078cdb837c616c7ee15d5ee42a1067eb51",
@@ -79,6 +79,10 @@
     "update_screen.py": "ee5e1138717f68f7c4f1626bbdee327d3b32f1f44fdd6cfd59ac708ae5984e70",
     "test_release_manager.py": "715ef0e2cf84dc116a8e35909940f487d7df25762778f2eba1a1f6ae08b97f8a",
     "OWNER-BUILDS.md": "d5e33c44e2d7f2be38d18088988ec401a9ac1b039c7f23989ad494b4c869c5f1",
-    "requirements-bootstrap.txt": "c68d42b4f3bc37d60a78625963dc0114873f30e98b078d599a91bc6038681cc4"
+    "requirements-bootstrap.txt": "c68d42b4f3bc37d60a78625963dc0114873f30e98b078d599a91bc6038681cc4",
+    "airport_selection.py": "33350053b89866cf992041766b8ff85f0e0781faf0462de9a363f57b88bb394a",
+    "airport_selector.py": "4ec6016cba8dc2e10fefb94c1d02728c9cf69cb1799875a6f87636a02088b689",
+    "test_airport_selection.py": "887b519c3bad04e74da7f7fdc8566c57a07fc0c5009e5960cb6a076d2c3ea05c",
+    "MANUAL-AIRPORTS.md": "973c9fad5ec2b861499466b04ba04bcc0f03be59dde73ac8f012ffac378c81a8"
   }
 }

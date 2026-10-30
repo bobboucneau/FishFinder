@@ -84,7 +84,11 @@ class Tests(unittest.TestCase):
         obj.stop.set()
     # Check: red arrows and persistent version.
     def test_red_arrows_and_persistent_version(self):
-        obj=gui();obj.airport_selected='KO22';obj.draw()
+        obj=gui();obj.airport_selected='KO22'
+        # This checks arrow styling, not the wall-clock validity of a shipped
+        # reference cache. Keep the in-memory fixture current as dates advance.
+        obj.catalog.airports['KO22']['reference'].update(effective='2000-01-01',expires='2099-01-01')
+        obj.draw()
         arrows=[kw for name,_,kw in obj.canvas.commands if name=='create_line' and kw.get('arrow')=='last']
         self.assertTrue(arrows);self.assertTrue(all(kw['fill']=='#ff3030' for kw in arrows))
         self.assertTrue(any(kw.get('tags')=='map-attribution' for _,_,kw in obj.canvas.commands))
