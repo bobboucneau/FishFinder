@@ -410,7 +410,8 @@ class Display:
         self.canvas=tk.Canvas(root,bg=BG,highlightthickness=0)
         self.canvas.pack(fill='both',expand=True)
         self.canvas.bind('<Button-1>',self.tap)
-        root.bind('<Escape>',lambda event:self.close())
+        # Maintenance-only keyboard exit; ordinary touch use has no Exit button.
+        root.bind('<Escape>',lambda event:self.request_exit())
         root.bind('f',lambda event:root.attributes('-fullscreen',not root.attributes('-fullscreen')))
         root.protocol('WM_DELETE_WINDOW',self.close)
         # Create a stop signal and a one-slot handoff queue. Keeping only one snapshot favors
@@ -904,9 +905,6 @@ class Display:
             self.rect(x-38,699,x+38,743,fill='#17372d' if scale==self.radius_nm else '#0a1814',outline=GREEN if scale==self.radius_nm else '#345247',width=2)
             self.text(x,721,f'{scale} NM',size=12)
             self.buttons.append((x-38,699,x+38,743,lambda s=scale:self.set_range(s)))
-        self.rect(340,750,460,790,fill='#2e1718',outline=RED,width=2)
-        self.text(400,770,'Exit',size=13)
-        self.buttons.append((340,750,460,790,self.request_exit))
         if not fix:
             self.rect(302,631,498,657,fill='#10251f',outline='#345247')
             self.text(400,644,'Recenter traffic',size=10)

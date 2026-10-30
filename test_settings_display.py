@@ -67,9 +67,10 @@ class Tests(unittest.TestCase):
             self.assertFalse(obj.idle);self.assertEqual(obj.radius_nm,10)
             obj.tap(SimpleNamespace(x=269,y=721))
             self.assertEqual(obj.radius_nm,2)
-            obj.tap(SimpleNamespace(x=400,y=770));self.assertTrue(obj.exit_pending)
+            self.assertFalse(any(kw.get('text')=='Exit' for _,_,kw in obj.canvas.commands))
+            obj.request_exit();self.assertTrue(obj.exit_pending)
             obj.tap(SimpleNamespace(x=318,y=460));self.assertFalse(obj.exit_pending)
-            obj.tap(SimpleNamespace(x=400,y=770))
+            obj.request_exit()
             with patch.object(obj,'close') as close:
                 obj.tap(SimpleNamespace(x=482,y=460));close.assert_called_once()
         self.assertIn('canvas=800x800',log.getvalue())
@@ -183,7 +184,8 @@ class Tests(unittest.TestCase):
         display.tap(SimpleNamespace(x=400,y=770))
         self.assertTrue(display.idle);self.assertFalse(display.exit_pending)
         display.tap(SimpleNamespace(x=400,y=770));self.assertFalse(display.idle)
-        display.tap(SimpleNamespace(x=400,y=770));self.assertTrue(display.exit_pending)
+        display.tap(SimpleNamespace(x=400,y=770));self.assertFalse(display.exit_pending)
+        display.request_exit();self.assertTrue(display.exit_pending)
 
     # Check: parallel runways without changing cache.
     def test_parallel_runways_without_changing_cache(self):
