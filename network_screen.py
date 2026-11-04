@@ -12,7 +12,8 @@ from tkinter import ttk
 import settings
 import network_manager as nm
 
-BG='#071710';FG='#e0f2ef';NOTICE='#ffd45c'
+from ff_controls import BG
+FG='#e0f2ef';NOTICE='#ffd45c'
 
 
 class NetworkScreen:
@@ -36,7 +37,9 @@ class NetworkScreen:
 
     def diagnostic_button(self,label,callback,parent=None):
         from ff_controls import RoundedButton
-        widget=RoundedButton(parent or self.body,label,callback,font_size=14,height=48)
+        widget=RoundedButton(parent or self.body,label,callback,
+                             role='confirm' if label=='Connect' else 'edit' if label in ('Back','Skip') else 'nav',
+                             font_size=14,height=48)
         widget.pack(side='left' if parent else 'top',padx=4,pady=4)
         return widget
 
@@ -160,21 +163,31 @@ class NetworkScreen:
 
     def list_page(self):
         if self.busy:return
-        self.clear();self.label('Choose a network')
+        self.clear()
+        tk.Label(self.body,text='Choose a network',bg=BG,fg=FG,
+                 font=('DejaVu Sans',18,'bold')).pack(pady=(8,10))
         holder=tk.Frame(self.body,bg=BG);holder.pack(fill='x',pady=5)
-        self.list=tk.Listbox(holder,font=('DejaVu Sans',11),height=5,exportselection=False)
+        # Larger rows improve both reading and finger selection. Preserve full
+        # BSSID identity and horizontal scrolling for unusually long names.
+        self.list=tk.Listbox(holder,font=('DejaVu Sans',16),height=5,
+                             bg='#092535',fg=FG,selectbackground='#0756a7',
+                             selectforeground='white',exportselection=False)
         self.list.pack(side='left',fill='both',expand=True)
         vertical=tk.Scrollbar(holder,command=self.list.yview);vertical.pack(side='right',fill='y')
         self.list.configure(yscrollcommand=vertical.set)
-        # A scrollbar is useful when an FBO advertises many nearby access points.
         scroll=tk.Scrollbar(self.body,orient='horizontal',command=self.list.xview)
         scroll.pack(fill='x');self.list.configure(xscrollcommand=scroll.set)
-        self.status()
-        bar=tk.Frame(self.body,bg=BG);bar.pack()
-        self.button('Connect',self.choose,bar)
-        self.button('Wait / Retry',lambda:self.scan(automatic=self.startup),bar)
-        self.button('Other networks',lambda:self.scan(automatic=False))
-        self.button('Skip' if self.startup else 'Back',self.close)
+        self.status(size=14)
+        # Anchor actions toward the bottom of the panel with breathing room
+        # between the explanatory text and the larger rounded touch targets.
+        actions=tk.Frame(self.body,bg=BG);actions.pack(side='bottom',pady=(18,8))
+        bar=tk.Frame(actions,bg=BG);bar.pack()
+        self.diagnostic_button('Connect',self.choose,bar)
+        self.diagnostic_button('Wait / Retry',lambda:self.scan(automatic=self.startup),bar)
+        more=tk.Frame(actions,bg=BG);more.pack()
+        self.diagnostic_button('Other networks',lambda:self.scan(automatic=False),more)
+        back=tk.Frame(actions,bg=BG);back.pack()
+        self.diagnostic_button('Skip' if self.startup else 'Back',self.close,back)
 
     def progress_page(self):
         # Do not render an empty chooser while the scan is still incomplete.

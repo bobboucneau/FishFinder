@@ -89,7 +89,13 @@ def pattern_altitude(a,runway,fallback_agl=1000):
 def draw(d,a):
     # The airport owns the whole scope while open: no map/control hitboxes behind it.
     d.canvas.delete('all');d.buttons=[];d.hits=[];d.airport_hits=[];d.airport_buttons=[]
-    d.rect(0,0,800,800,fill='#07131f',outline='')
+    from ff_controls import BG, PALETTE
+    d.rect(0,0,800,800,fill=BG,outline='')
+    d.canvas.create_oval(d.cx-394*d.unit,d.cy-394*d.unit,
+                        d.cx+394*d.unit,d.cy+394*d.unit,
+                        outline=PALETTE['nav'][1],width=3*d.unit)
+    d.surface_box((260,22,540,79),'nav')
+    d.surface_box((175,158,625,246))
     d.text(400,53,a['code'],size=26,fill='#62b6ff')
     d.text(400,94,a['name'],size=15,width=490*d.unit)
     elevation=number(a.get('elevation_ft'))

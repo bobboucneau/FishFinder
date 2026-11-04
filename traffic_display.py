@@ -1196,7 +1196,8 @@ class Display:
     # Show our own altitude, speed, inferred true ground course, source and age; explicitly
     # report a fix that has become stale.
     def ownship_details(self,fix,history,now):
-        self.rect(176,209,624,614,fill='#071710',outline=WHITE,width=2)
+        self.surface_box((152,190,648,630))
+        self.surface_box((240,213,560,267),'nav')
         self.text(400,241,'Ownship',size=22)
         if fix:
             movement=velocity(history)
@@ -1210,13 +1211,14 @@ class Display:
             self.text(400,513,'Course is over the ground, not magnetic heading.',fill=MUTED,size=10,width=390*self.unit)
         else:
             self.text(400,390,'Ownship position is no longer fresh',fill=YELLOW,size=12)
-        self.rect(322,571,478,602,fill='#183b2d',outline=GREEN)
-        self.text(400,587,'Close',size=12)
+        self.surface_box((322,571,478,619),'nav')
+        self.text(400,595,'Close',size=14)
 
     # Show information for the selected traffic target, including data age and the reason for
     # its current proximity color.
     def details(self,info):
-        self.rect(176,209,624,614,fill='#071710',outline=WHITE,width=2)
+        self.surface_box((152,190,648,630))
+        self.surface_box((240,213,560,267),'nav')
         title=(self.snapshot.labels or {}).get(self.selected,self.selected)
         self.text(400,241,title,size=18 if len(title)>14 else 22)
         if info:
@@ -1231,12 +1233,12 @@ class Display:
                 lines.append(f'Closest pass: {cpa[1]:.2f} NM in {cpa[0]/60:.1f} min')
             for i,line in enumerate(lines):
                 self.text(400,285+i*29,line,size=12)
-            self.text(400,513,reason,fill=color,size=12,width=390*self.unit)
+            self.text(400,513,reason,fill=color,size=12,width=440*self.unit)
             self.text(400,549,'Vertical styling requires fresh matching pressure altitudes.\nUnknown altitude or rate retains proximity colors.',fill=MUTED,size=10)
         else:
             self.text(400,390,'Target no longer has recent data',fill=YELLOW,size=12)
-        self.rect(322,571,478,602,fill='#183b2d',outline=GREEN)
-        self.text(400,587,'Close',size=12)
+        self.surface_box((322,571,478,619),'nav')
+        self.text(400,595,'Close',size=14)
 
     # Check write permissions again and open the settings panel with actionable status
     # messages.
@@ -1289,7 +1291,7 @@ class Display:
         # Visible controls and popup actions never wait for a second tap.
         popup=bool(self.selected or self.airport_selected or self.target_choices)
         immediate=(self.notice_pending or self.exit_pending or self.target_choices or
-            (self.selected and 322<=x<=478 and 571<=y<=602) or
+            (self.selected and 322<=x<=478 and 571<=y<=619) or
             (self.airport_selected and any(x1<=x<=x2 and y1<=y<=y2
                 for x1,y1,x2,y2,_ in self.airport_buttons)) or
             (not popup and any(x1<=x<=x2 and y1<=y<=y2
@@ -1351,7 +1353,7 @@ class Display:
                     self.airport_action(action);return
             return
         if self.selected:
-            if 322<=x<=478 and 571<=y<=602 or not(176<=x<=624 and 209<=y<=614):
+            if 322<=x<=478 and 571<=y<=619 or not(152<=x<=648 and 190<=y<=630):
                 self.selected=None;self.draw()
             return
         for x1,y1,x2,y2,action in self.buttons:
