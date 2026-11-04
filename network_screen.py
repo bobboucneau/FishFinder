@@ -31,7 +31,96 @@ class NetworkScreen:
         except (OSError,ValueError) as exc:
             self.label('Saved network settings need attention.')
             self.label(str(exc));self.button('Back / Skip',self.close);return
-        self.list_page();self.scan(automatic=startup)
+        if startup:self.list_page();self.scan(automatic=True)
+        else:self.connection_page()
+
+    def diagnostic_button(self,label,callback,parent=None):
+        from ff_controls import RoundedButton
+        widget=RoundedButton(parent or self.body,label,callback,font_size=14,height=48)
+        widget.pack(side='left' if parent else 'top',padx=4,pady=4)
+        return widget
+
+    def connection_page(self):
+        if self.busy:return
+        import network_diagnostics as diagnostics
+        self.clear();self.connection={}
+        tk.Label(self.body,text='Wi-Fi / Internet',bg=BG,fg=FG,
+                 font=('DejaVu Sans',18,'bold')).pack(pady=6)
+        self.connection_text=tk.StringVar(value='Reading current connection…')
+        tk.Label(self.body,textvariable=self.connection_text,bg=BG,fg=FG,
+                 font=('DejaVu Sans',14),wraplength=490,justify='left').pack(pady=8)
+        row=tk.Frame(self.body,bg=BG);row.pack()
+        self.diagnostic_button('Refresh',self.connection_page,row)
+        self.diagnostic_button('Test host',self.test_page,row)
+        self.status(size=14)
+        self.diagnostic_button('Choose network',self.choose_network)
+        self.diagnostic_button('Back',self.close)
+        self.message.set('Reading local addresses; this does not change networks.')
+        def complete(info):
+            self.connection=info
+            if not info.get('connected'):
+                self.connection_text.set('Wi-Fi is not connected.')
+            else:
+                ipv4=', '.join(info.get('ipv4',[])) or 'unavailable'
+                ipv6=', '.join(info.get('ipv6',[])[:2])
+                text=f"{info['name']} · {info['device']}\nIP: {ipv4}\nGateway: {info.get('gateway') or 'unavailable'}"
+                if ipv6:text+='\nIPv6: '+ipv6
+                self.connection_text.set(text)
+            self.message.set('Select Test host to check a destination.')
+        self.job(lambda:diagnostics.connection(self.manager),complete)
+
+    def choose_network(self):
+        if self.busy:return
+        self.list_page();self.scan(automatic=False)
+
+    def test_page(self):
+        if self.busy:return
+        import network_diagnostics as diagnostics
+        self.clear()
+        tk.Label(self.body,text='Test connection',bg=BG,fg=FG,
+                 font=('DejaVu Sans',18,'bold')).pack(pady=6)
+        tk.Label(self.body,text='IP address or host name',bg=BG,fg=FG,
+                 font=('DejaVu Sans',14)).pack(pady=4)
+        self.host=tk.StringVar(value=settings.load()['stratux_ip'])
+        entry=tk.Entry(self.body,textvariable=self.host,width=26,font=('DejaVu Sans',16))
+        entry.pack(pady=5);entry.bind('<Button-1>',lambda event:self.keyboard(entry))
+        row=tk.Frame(self.body,bg=BG);row.pack()
+        self.diagnostic_button('Stratux',lambda:self.host.set(settings.load()['stratux_ip']),row)
+        self.diagnostic_button('Gateway',self.gateway_target,row)
+        self.diagnostic_button('Ping',self.ping_host)
+        self.diagnostic_button('Check Stratux',self.check_receiver)
+        self.status(size=14)
+        self.diagnostic_button('Back',self.connection_page)
+        self.message.set('Ping tests replies only. Check Stratux tests its actual data service.')
+
+    def gateway_target(self):
+        if self.busy:return
+        gateway=self.connection.get('gateway')
+        if gateway:self.host.set(gateway)
+        else:self.message.set('No IPv4 gateway is available. Refresh the connection details.')
+
+    def ping_host(self):
+        if self.busy:return
+        import network_diagnostics as diagnostics
+        try:host=diagnostics.target(self.host.get())
+        except ValueError as exc:self.message.set(str(exc));return
+        self.message.set('Pinging '+host+'…')
+        self.job(lambda:diagnostics.ping(host),self.message.set)
+
+    def check_receiver(self):
+        if self.busy:return
+        import ipaddress
+        try:address=str(ipaddress.IPv4Address(self.host.get().strip()))
+        except ValueError:self.message.set('Use the receiver IPv4 address for Check Stratux.');return
+        device=self.connection.get('device')
+        if not device:self.message.set('Connect to Wi-Fi first.');return
+        self.message.set('Checking Stratux service and Internet…')
+        def complete(result):
+            receiver=result.get('stratux_ip')
+            self.message.set(('Stratux responding at '+receiver if receiver else 'Stratux not confirmed.')+
+                             (' · Internet reachable' if result.get('internet') else ' · Internet not confirmed'))
+        # Read-only probe: do not authorize a receiver, rewrite profiles, or switch Wi-Fi.
+        self.job(lambda:self.manager.probe(device,address),complete)
 
     def label(self,text):
         tk.Label(self.body,text=text,bg=BG,fg=FG,font=('DejaVu Sans',11),wraplength=450).pack(pady=3)
@@ -45,8 +134,8 @@ class NetworkScreen:
     def clear(self):
         for child in self.body.winfo_children():child.destroy()
 
-    def status(self):
-        tk.Label(self.body,textvariable=self.message,bg=BG,fg=NOTICE,wraplength=440,font=('DejaVu Sans',10)).pack(pady=5)
+    def status(self,size=10):
+        tk.Label(self.body,textvariable=self.message,bg=BG,fg=NOTICE,wraplength=470,font=('DejaVu Sans',size)).pack(pady=5)
 
     def job(self,callback,done):
         if self.busy:return

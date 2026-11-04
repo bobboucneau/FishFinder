@@ -81,9 +81,9 @@ class RoundedButton(tk.Canvas):
     Existing Setup pages can keep their pack/grid layout. The button understands
     state='disabled' so a running update cannot be started twice.
     """
-    def __init__(self,parent,label,command,role='nav'):
-        self.label=label;self.command=command;self.role=role;self.enabled=True
-        super().__init__(parent,width=max(130,len(label)*8+24),height=38,
+    def __init__(self,parent,label,command,role='nav',font_size=11,height=38):
+        self.label=label;self.command=command;self.role=role;self.enabled=True;self.font_size=font_size
+        super().__init__(parent,width=max(130,round(len(label)*font_size*.75)+24),height=height,
                          bg=BG,highlightthickness=0,takefocus=True)
         self.bind('<Configure>',lambda event:self.paint())
         self.bind('<ButtonRelease-1>',self.activate)
@@ -106,7 +106,7 @@ class RoundedButton(tk.Canvas):
         rounded_box(self,(2,2,w-2,h-2),lambda *coords:coords,1,
                     self.role if self.enabled else 'off',18)
         self.create_text(w/2,h/2,text=self.label,fill='white' if self.enabled else '#8294a0',
-                         font=('DejaVu Sans',11,'bold'))
+                         font=('DejaVu Sans',self.font_size,'bold'))
         if self.focus_get()==self:
             self.create_rectangle(8,8,w-8,h-8,outline='white',dash=(2,2))
 
