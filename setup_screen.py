@@ -41,6 +41,7 @@ class Setup:
         nav=tk.Frame(self.frame,bg=BG);nav.pack()
         self.button(nav,'Display',lambda:self.show_page(0)).pack(side='left',padx=4)
         self.button(nav,'Receiver / Updates',lambda:self.show_page(1)).pack(side='left',padx=4)
+        self.button(nav,'Demo',lambda:self.show_page(2)).pack(side='left',padx=4)
         self.status=tk.StringVar(value='; '.join(getattr(display,'permission_issues',[])) or 'Changes apply when you tap Save.')
         bottom=tk.Frame(self.frame,bg=BG);bottom.pack(side='bottom',pady=5)
         self.button(bottom,'Cancel / Back',self.close).pack(side='left',padx=5)
@@ -53,6 +54,7 @@ class Setup:
         if self.busy:self.status.set('Wait for the airport update before switching pages.');return
         self.hide_keyboard();self.refresh_button=None
         for child in self.page.winfo_children():child.destroy()
+        if index==2:self.demo_page();return
         fields=([('default_range','Range (NM)'),('label_size','Label size'),('orientation','Map orientation'),('ownship_symbol','Ownship airplane'),
                  ('horizon_minutes','Projection (minutes)'),('idle_seconds','Hide controls (seconds)'),('trail_seconds','Trail (seconds)')]
                 if index==0 else [('stratux_ip','Stratux IP'),('own_tail','Your tail number'),
@@ -81,6 +83,42 @@ class Setup:
             self.refresh_button.grid(row=0,column=1,padx=3,pady=3,sticky='ew')
             self.button(controls,'Code updates',self.code_updates).grid(row=1,column=0,padx=3,pady=3,sticky='ew')
             self.button(controls,'Restore defaults',self.defaults).grid(row=1,column=1,padx=3,pady=3,sticky='ew')
+
+    def demo_page(self):
+        self.status.set('Mode buttons apply after confirmation; Save is for other settings.')
+        import os
+        self.demo_code=tk.StringVar(value=os.environ.get('FISHFINDER_DEMO_AIRPORT','O22'))
+        active=getattr(self.display.args,'moving_demo',False)
+        tk.Label(self.page,text='DEMO MODE' if active else 'LIVE MODE',bg=BG,fg='#ffd45c' if active else FG,font=('DejaVu Sans',19,'bold')).pack(pady=12)
+        tk.Label(self.page,text='Demo airport identifier',bg=BG,fg=FG,font=('DejaVu Sans',15)).pack(pady=6)
+        entry=tk.Entry(self.page,textvariable=self.demo_code,width=10,font=('DejaVu Sans',24),justify='center')
+        entry.pack(pady=8);entry.bind('<Button-1>',lambda event:self.show_keyboard(entry))
+        self.button(self.page,'Start / restart demo',lambda:self.change_mode('demo')).pack(pady=8)
+        self.button(self.page,'Return to live traffic',lambda:self.change_mode('live')).pack(pady=8)
+        tk.Label(self.page,text='Synthetic traffic only. Switching restarts the display.\nLive records and Wi-Fi are preserved.',bg=BG,fg='#a8cce5',font=('DejaVu Sans',11),wraplength=450).pack(pady=6)
+
+    def change_mode(self,mode):
+        import os
+        from demo_control import airport_spec,request
+        if os.environ.get('FISHFINDER_MODE_CONTROL')!='1':
+            self.status.set('Restart the updated appliance launcher to enable mode switching.');return
+        try:
+            code=self.demo_code.get().strip().upper()
+            if mode=='demo':
+                airport,_=airport_spec(self.display.args.airports,code);code=airport['ident']
+        except (ValueError,OSError) as exc:self.status.set(str(exc));return
+        # The extra deliberate confirmation helps avoid accidentally substituting
+        # simulated traffic for real receiver data during a flight.
+        for child in self.page.winfo_children():child.destroy()
+        self.hide_keyboard()
+        text=('Start synthetic traffic at '+code+'?' if mode=='demo' else 'Stop simulation and return to live traffic?')
+        tk.Label(self.page,text=text,bg=BG,fg='#ffd45c',font=('DejaVu Sans',18),wraplength=430).pack(pady=25)
+        def confirm():
+            try:request(os.environ['FISHFINDER_HOME'],mode,code)
+            except (OSError,KeyError) as exc:self.status.set(str(exc));return
+            self.status.set('Changing mode… Please wait.')
+        self.button(self.page,'Confirm change',confirm).pack(pady=10)
+        self.button(self.page,'Cancel',lambda:self.show_page(2)).pack(pady=10)
 
     def button(self,parent,label,command):
         return RoundedButton(parent,label,command,role='confirm' if label=='Save / Back' else 'cancel' if label=='Cancel / Back' else 'nav')

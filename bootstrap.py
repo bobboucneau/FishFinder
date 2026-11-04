@@ -34,6 +34,12 @@ class Launcher:
         self.rows=[('Powered on',GREEN),('Checking installation…',YELLOW)]
         self.prompt=None;self.prompted=None;self.started=0;self.ready_since=None;self.failures=0;self.quitting=False
         self.child_logs=[]
+        self.database_dir=Path(args.database).parent
+        operation=read(self.store.home/'shared/operation.json',{})
+        self.demo_airport=operation.get('airport','O22')
+        if operation.get('mode') in ('live','demo'):
+            args.demo=operation['mode']=='demo'
+            args.database=str(self.database_dir/('demo_objects.db' if args.demo else 'flying_objects.db'))
         signal.signal(signal.SIGTERM,lambda *_:self.shutdown())
         signal.signal(signal.SIGINT,lambda *_:self.shutdown())
         # A visible short splash precedes the explanatory progress list.
@@ -69,6 +75,9 @@ class Launcher:
                  FISHFINDER_HEARTBEAT=str(self.store.home/'runtime/display-heartbeat.json'),
                  FISHFINDER_RELEASE_ID=state['current'],
                  FISHFINDER_OWNER_BUILD='1' if read(self.store.release(state['current'])/'.release.json',{}).get('owner_build') else '0',
+                 FISHFINDER_MODE_CONTROL='1',
+                 FISHFINDER_DEMO_AIRPORT=self.demo_airport,
+                 FISHFINDER_AIRPORTS=str(shared/'airports.json'),
                  FISHFINDER_PYTHON=self.args.python,
                  FISHFINDER_DATABASE=self.args.database,
                  FISHFINDER_LOCK_FILE=str(Path(self.args.database).parent/'collector.lock'))
@@ -150,9 +159,36 @@ class Launcher:
     def problem(self,message):
         self.progress(('Needs attention',RED),(message,RED),('Logs: FishFinder/runtime/',YELLOW))
 
+    def switch_mode(self, request):
+        # Validate before interrupting the working application. Never accept a
+        # database path from a request, and never reset or remove the live DB.
+        from demo_control import airport_spec, write_json
+        mode=request.get('mode')
+        if mode not in ('live','demo'):raise ValueError('Invalid mode request')
+        airport=request.get('airport','O22')
+        if mode=='demo':
+            selected,_=airport_spec(self.store.home/'shared/airports.json',airport)
+            airport=selected['ident']
+        self.progress(('Changing operation mode…',YELLOW),('Stopping applications safely…',YELLOW))
+        self.root.update_idletasks();self.stop_children()
+        self.args.demo=mode=='demo';self.demo_airport=airport
+        self.args.database=str(self.database_dir/('demo_objects.db' if self.args.demo else 'flying_objects.db'))
+        if self.args.demo:
+            # A fresh synthetic database prevents trails from a previous demo
+            # location appearing at the new one. Children are fully stopped.
+            for suffix in ('','-wal','-shm'):
+                Path(self.args.database+suffix).unlink(missing_ok=True)
+        write_json(self.store.home/'shared/operation.json',{'mode':mode,'airport':airport})
+        self.failures=0;self.launch()
+
     def poll(self):
         if self.quitting:return
         try:
+            mode_request=self.store.home/'runtime/mode-request.json'
+            if mode_request.exists() and not self.prompt:
+                request=read(mode_request,{})
+                mode_request.unlink()
+                self.switch_mode(request)
             rollback=self.store.home/'runtime/rollback-request.json'
             if rollback.exists():
                 self.stop_children();self.store.rollback();rollback.unlink();self.launch()

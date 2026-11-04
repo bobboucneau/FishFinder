@@ -130,16 +130,22 @@ def rounded_route(address,tail,kind,start,waypoints):
 class Scenario:
     # Load the four demo airports, seed the random generator, and prepare departure schedules
     # and traffic-pattern geometry.
-    def __init__(self, airports_path=None, seed=22):
+    def __init__(self, airports_path=None, seed=22, airport="O22"):
         path=airports_path or Path(__file__).with_name('airports.json')
         records=json.loads(Path(path).read_text())['airports']
-        self.airports={a['code']:a for a in records if a['code'] in {x[0] for x in AIRPORTS}}
-        if len(self.airports)!=4:raise ValueError('Demo requires O22, E45, KCPU and O27 in the airport cache')
-        self.origin=(self.airports['O22']['lat'],self.airports['O22']['lon'])
+        # O22 retains the familiar multi-airport demonstration. Other choices
+        # use one local pattern and the same synthetic passing traffic.
+        from demo_control import airport_spec
+        selected,spec=airport_spec(path,airport)
+        self.specs=AIRPORTS if selected['code']=='O22' else [spec]
+        self.airports={a['code']:a for a in records if a['code'] in {x[0] for x in self.specs}}
+        if len(self.airports)!=len(self.specs):raise ValueError('Demo airport cache is incomplete')
+        self.home=selected;self.elevation=2100. if selected['code']=='O22' else float(selected['elevation_ft'])
+        self.origin=(selected['lat'],selected['lon'])
         self.random=random.Random(seed);self.flights=[];self.rejected=0;self.serial=0
-        self.next_departures=[0,75,150,225];self.departure_counts=[0]*4
+        self.next_departures=[75*i for i in range(len(self.specs))];self.departure_counts=[0]*len(self.specs)
         self.next_airline=20;self.next_ga=45;self.next_heli=100;self.generated_until=-1
-        self.patterns=[self.pattern(*spec[:3]) for spec in AIRPORTS]
+        self.patterns=[self.pattern(*spec[:3]) for spec in self.specs]
 
     # Build one airport traffic-pattern route from its actual runway endpoints and the
     # requested climb/speed profile.
@@ -152,7 +158,7 @@ class Scenario:
         dx,dy=far[0]-threshold[0],far[1]-threshold[1];length=math.hypot(dx,dy)
         forward=(dx/length,dy/length);right=(forward[1],-forward[0])
         climb_speed=75*MPH_TO_KNOTS;cruise=110*MPH_TO_KNOTS;approach=70*MPH_TO_KNOTS
-        upwind=climb_speed*(700/500*60)/3600
+        upwind=max(climb_speed*(700/500*60)/3600,length+.4)
         crosswind=.80  # NM; room for two standard-rate turns at 75 mph
         # Ahead is runway direction; right is the side of a right-hand pattern.
         layout=[(0,0,0,climb_speed),(upwind,0,700,climb_speed),
@@ -165,7 +171,7 @@ class Scenario:
     # simulation time.
     def ownship(self,t):
         speed=100.;angle=t*speed/(3600*5)
-        return 5*math.cos(angle),5*math.sin(angle),5000.,speed
+        return 5*math.cos(angle),5*math.sin(angle),self.elevation+2900.,speed
 
     # Check a candidate route against admitted traffic and ownship at sampled times, with an
     # extra separation margin.
@@ -199,6 +205,12 @@ class Scenario:
     # Choose a Columbia/Pine Mountain Lake/southwest helicopter route and connect airport
     # altitude to cruise altitude.
     def helicopter(self,start):
+        if len(self.specs)==1:
+            self.serial+=1
+            height=self.elevation+1400
+            points=[(0,0,self.elevation,80),(-2,-2,height,80),(-24,-24,height,80)]
+            if self.random.randrange(2):points.reverse()
+            return route(0xD20000+self.serial,demo_registration(0xD20000+self.serial),'helicopter',start,points)
         self.serial+=1;o22=self.airports['O22'];e45=self.airports['E45']
         col=local(self.origin,o22['lat'],o22['lon']);pine=local(self.origin,e45['lat'],e45['lon'])
         sw=(-24,-24);choice=self.random.randrange(3)
@@ -221,17 +233,17 @@ class Scenario:
             start=min(times)
             if start>now:break
             index=times.index(start)
-            if index<4:
-                code,runway,elev,count,interval=AIRPORTS[index]
+            if index<len(self.specs):
+                code,runway,elev,count,interval=self.specs[index]
                 n=self.departure_counts[index];slot=n%count
                 points=self.patterns[index]
                 # Two circuits per sortie, including a touch-and-go.
                 f=rounded_route(0xD00000+index*10+slot,demo_registration(0xD00000+index*10+slot),'C172',start,points+points[1:])
                 self.admit(f);self.departure_counts[index]+=1
                 self.next_departures[index]+=interval
-            elif index==4:
+            elif index==len(self.specs):
                 self.admit(self.transit(start,'airliner'));self.next_airline+=self.random.uniform(45,75)
-            elif index==5:
+            elif index==len(self.specs)+1:
                 self.admit(self.transit(start,'GA'));self.next_ga+=self.random.uniform(90,160)
             else:
                 self.admit(self.helicopter(start));self.next_heli+=self.random.uniform(300,480)
@@ -263,7 +275,7 @@ def run(stop,db_path,seed=22):
     import time
     from contextlib import closing
     import FishFinder as collector
-    scenario=Scenario(seed=seed);start=time.monotonic();last_own=-3
+    scenario=Scenario(airports_path=__import__('os').environ.get('FISHFINDER_AIRPORTS'),seed=seed,airport=__import__('os').environ.get('FISHFINDER_DEMO_AIRPORT','O22'));start=time.monotonic();last_own=-3
     logging.warning('DEMO MODE: synthetic traffic; no Stratux connection. Database %s',db_path)
     # Use the caller's selected demo database and ordinary collector functions. The demo does
     # not need a Stratux network connection.
