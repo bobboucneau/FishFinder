@@ -2,7 +2,7 @@
 
 Wake the controls with a double tap, then choose Airport. Use the large A–Z/0–9 keys to enter O22, KGOO, KCPU or another 1–7-character code. Go validates the code before opening the same full-screen airport reference used by map taps. Back dismisses the selector; Clear and backspace permit corrections. Failed lookup preserves the entry. Display/local codes such as O22 resolve to their cached canonical identifier (KO22); ambiguous aliases are rejected instead of guessed.
 
-Typed selections are saved as manual_airport in the shared settings file and restored on application restart. Back to traffic closes the visible page without forgetting the typed selection. Select airport on the reference page reopens the selector. Existing map taps remain ad-hoc browsing and do not change the remembered typed preference.
+Typed selections are saved as manual_airport in the shared settings file and prefilled when opening the airport selector. Startup opens the traffic map. Back to traffic closes the visible page without forgetting the typed selection. Select airport on the reference page reopens the selector. Existing map taps remain ad-hoc browsing and do not change the remembered typed preference.
 
 Nearby airports explicitly clears the pinned preference and offers the nearest 20 airports within 200 NM of a fresh ownship position, four per page. Prev/Next remain visible and disabled at the ends. The Nearby list is a snapshot at selection time so rows do not move under a finger; the selected airport's reference-page distance/bearing then updates with current ownship. A missing fix does not guess a location from nearby traffic.
 

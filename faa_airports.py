@@ -26,7 +26,9 @@ INDEX='https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscr
 # Fetch a bounded number of bytes from a reference-data URL; reject oversized responses.
 def download(url,limit):
     request=urllib.request.Request(url,headers={'User-Agent':'FishFinder-airport-reference/0.4'})
-    with urllib.request.urlopen(request,timeout=90) as response:raw=response.read(limit+1)
+    from download_progress import read_download
+    label = 'FAA airport archive' if url.endswith('.zip') else 'FAA reference index'
+    with urllib.request.urlopen(request,timeout=90) as response:raw=read_download(response,label,limit)
     if len(raw)>limit:raise ValueError('FAA download exceeds size limit')
     return raw
 
@@ -100,4 +102,7 @@ def fetch_enrichment(data):
     if len(links)!=1:raise ValueError('Cannot identify FAA airport CSV download')
     url=urljoin(page,links[0])
     if not url.startswith(('https://nfdc.faa.gov/','https://aeronav.faa.gov/')):raise ValueError('Unexpected FAA data host')
-    return enrich(data,download(url,30_000_000),day.isoformat(),page)
+    raw=download(url,30_000_000)
+    from download_progress import stage
+    stage('Validating FAA airport data…')
+    return enrich(data,raw,day.isoformat(),page)

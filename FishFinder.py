@@ -541,11 +541,34 @@ def main():
     websocket.setdefaulttimeout(HTTP_TIMEOUT)
     problem=database_problem(DATABASE_PATH)
     if problem:raise RuntimeError(problem)
+    # SIGTERM is what systemd and the appliance launcher send during shutdown.
+    # Request the same cooperative stop as Ctrl-C instead of killing SQLite writers.
+    import signal
+    from fs_checks import check_database, database_notice
+    stop = threading.Event()
+    signal.signal(signal.SIGTERM, lambda *_: stop.set())
+    notice = database_notice(DATABASE_PATH)
+    try:
+        check_database(DATABASE_PATH)
+    except sqlite3.Error as exc:
+        message = f'Database check failed: {exc}. Data preserved. Restore a verified backup before restarting.'
+        logging.error('%s (%s)', message, DATABASE_PATH)
+        temporary = notice.with_suffix('.startup-error.tmp')
+        temporary.write_text(message)
+        temporary.replace(notice)
+        # Stay available for the display without starting any database writer.
+        try:
+            stop.wait()
+        except KeyboardInterrupt:
+            pass
+        return
+    notice.unlink(missing_ok=True)
+    if stop.is_set():
+        return
     initialize(DATABASE_PATH)
     logging.info('Using database %s', DATABASE_PATH)
     # All workers receive this same stop signal. Setting it requests a cooperative shutdown;
     # each worker finishes its current bounded operation and exits its loop.
-    stop = threading.Event()
     if args.demo:
         from demo_traffic import run as demo_loop
         workers=[threading.Thread(target=demo_loop,args=(stop,DATABASE_PATH,args.demo_seed),name="demo"),

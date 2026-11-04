@@ -51,11 +51,14 @@ class Tests(unittest.TestCase):
         self.assertEqual(display.config['manual_airport'],'')
         self.assertEqual(display.airport_selected,'KCPU')
 
-    def test_restored_selection_and_shared_navigation_line(self):
+    def test_startup_map_and_shared_navigation_line(self):
         with patch.object(settings,'load',return_value=dict(settings.DEFAULTS,manual_airport='KO22')):
             display=gui()
         self.addCleanup(display.stop.set)
-        self.assertEqual(display.airport_selected,'KO22')
+        self.assertIsNone(display.airport_selected)
+        self.assertEqual(display.config['manual_airport'],'KO22')
+        display.choose_airport('KO22',remember=True)
+        display.airport_details()
         labels=[kw.get('text','') for _,_,kw in display.canvas.commands]
         self.assertTrue(any('TRUE' in label and 'NM' in label for label in labels))
         self.assertIn('Select airport',labels)

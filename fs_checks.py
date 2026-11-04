@@ -35,3 +35,20 @@ def database_problem(path):
             problem=write_problem(candidate)
             if problem:return problem
     return ''
+
+
+def check_database(path):
+    """Check existing SQLite data before initialization can modify it."""
+    import sqlite3
+    from contextlib import closing
+    path = Path(path)
+    if not path.exists():
+        return
+    with closing(sqlite3.connect(path.absolute().as_uri()+'?mode=ro', uri=True, timeout=5)) as conn:
+        result = conn.execute('PRAGMA quick_check(1)').fetchone()
+        if result != ('ok',):
+            raise sqlite3.DatabaseError(str(result))
+
+
+def database_notice(path):
+    return Path(str(path)+'.startup-error')

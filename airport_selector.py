@@ -2,6 +2,9 @@
 import tkinter as tk
 import time
 from airport_selection import lookup,distance_bearing
+from ff_controls import RoundScreen
+
+CHARACTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 BG='#07131f';FG='#e0f2ef'
 
@@ -14,8 +17,8 @@ class Selector:
         self.code=tk.StringVar(value=display.config.get('manual_airport',''))
         saved=display.catalog.airports.get(self.code.get())
         if saved:self.code.set(saved['code'])
-        self.message=tk.StringVar(value='Enter an airport ID, for example O22 or KGOO.')
-        self.page=0;self.near=[];self.entry_page()
+        self.message=tk.StringVar(value='')
+        self.page=0;self.near=[];self.wheel=0;self.entry_page()
 
     def clear(self):
         for child in self.body.winfo_children():child.destroy()
@@ -28,41 +31,137 @@ class Selector:
 
     def entry_page(self):
         self.clear()
-        tk.Label(self.body,text='Select airport',bg=BG,fg=FG,font=('DejaVu Sans',17)).pack(pady=3)
-        entry=tk.Entry(self.body,textvariable=self.code,font=('DejaVu Sans',24),justify='center',width=12)
-        entry.pack(pady=4)
-        # Physical keyboards work too; reject punctuation/overlength input while
-        # keeping the Go error visible instead of losing what the user entered.
-        entry.configure(validate='key',validatecommand=(entry.register(lambda text:len(text)<=7 and (not text or text.isascii() and text.isalnum())),'%P'))
-        keyboard=tk.Frame(self.body,bg=BG);keyboard.pack()
-        for row in range(6):keyboard.grid_rowconfigure(row,minsize=46)
-        for column in range(6):keyboard.grid_columnconfigure(column,minsize=62,uniform='keys')
-        for index,char in enumerate('ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'):
-            self.button(keyboard,char,lambda c=char:self.key(c),row=index//6,column=index%6)
-        tk.Label(self.body,textvariable=self.message,bg=BG,fg='#ffd45c',font=('DejaVu Sans',10),wraplength=460).pack(pady=3)
-        bar=tk.Frame(self.body,bg=BG);bar.pack(fill='x')
-        for column in range(4):bar.grid_columnconfigure(column,weight=1,uniform='actions')
-        for column,(label,action) in enumerate((('⌫',lambda:self.key('back')),('Clear',lambda:self.key('clear')),('Go',self.go),('Back',self.close))):
-            self.button(bar,label,action,row=0,column=column)
-        nearby=tk.Frame(self.body,bg=BG);nearby.pack(fill='x');nearby.grid_columnconfigure(0,weight=1)
-        self.button(nearby,'Nearby airports',self.nearby,row=0,column=0)
+        self.frame.configure(highlightthickness=0)
+        self.frame.place_configure(relwidth=1,relheight=1)
+        self.body.pack_configure(padx=0,pady=0)
+        self.screen=RoundScreen(self.body,self.draw_entry)
+        self.screen.pack(fill='both',expand=True)
+        self.screen.bind('<KeyPress>',self.keyboard)
+        self.screen.bind('<ButtonPress-1>',self.wheel_press)
+        self.screen.bind('<ButtonRelease-1>',self.wheel_release)
+        self.screen.bind('<Destroy>',lambda event:self.stop_repeat())
+        self.repeat_job=None
+        self.press=None
+        self.screen.focus_set()
+
+    def match(self):
+        """Preview a valid match without changing the saved airport."""
+        try:
+            return lookup(self.display.catalog,self.code.get())
+        except ValueError:
+            return None
+
+    def draw_entry(self):
+        c=self.screen
+        c.start()
+        airport=self.match()
+        c.button((360,19,440,99),'×',self.close,'cancel',59)
+        c.box((174,109,626,193))
+        c.label(400,151,self.code.get().upper() or 'Enter airport ID',42,bold=True)
+        c.box((83,209,717,281))
+        if airport:
+            fix=getattr(self.display,'airport_fix',None)
+            detail='Position unavailable'
+            if fix and 0<=time.time()-fix.time<=15:
+                distance,_=distance_bearing((fix.lat,fix.lon),(airport['lat'],airport['lon']))
+                detail=f'{distance:.1f} NM'
+            c.label(400,232,airport['name'][:49],22,bold=True)
+            c.label(400,258,f"{airport['code']}  ·  {detail}",17,'#a8cce5')
+        else:
+            c.label(400,245,'Select letters or numbers with the wheel',20,'#a8cce5')
+        c.button((298,294,502,356),'▲',lambda:self.spin(-1))
+        c.box((307,361,493,525))
+        c.label(400,383,CHARACTERS[(self.wheel-1)%len(CHARACTERS)],28,'#a8cce5')
+        c.box((316,402,484,477),'nav')
+        c.label(400,439,CHARACTERS[self.wheel],57,bold=True)
+        c.label(400,501,CHARACTERS[(self.wheel+1)%len(CHARACTERS)],28,'#a8cce5')
+        c.button((298,530,502,592),'▼',lambda:self.spin(1))
+        c.button((42,344,264,425),'⌫ Back',lambda:self.key('back'),'edit')
+        c.button((47,442,264,523),'Clear',lambda:self.key('clear'),'edit')
+        c.button((535,367,753,495),'→ Next',
+                 self.append_selected if len(self.code.get())<7 else None)
+        c.label(400,610,self.message.get(),16,'#ffd45c',width=max(1,round(480*c.scale)))
+        c.button((226,638,574,709),'✓ Done',self.go if airport else None,'confirm',37)
+        c.button((302,720,498,768),'Nearby airports',self.nearby,size=20)
+
+    def wheel_press(self,event):
+        # Save the starting point in design units, so gestures scale with the UI.
+        c=self.screen
+        if not getattr(c,'scale',0):
+            return
+        x=(event.x-c.offset[0])/c.scale
+        y=(event.y-c.offset[1])/c.scale
+        self.press=(x,y)
+        self.repeated=False
+        if 298<=x<=502 and (294<=y<=356 or 530<=y<=592):
+            step=-1 if y<=356 else 1
+            self.repeat_job=c.after(380,lambda:self.repeat_spin(step,145))
+
+    def repeat_spin(self,step,delay):
+        self.repeated=True
+        self.spin(step)
+        self.repeat_job=self.screen.after(delay,lambda:self.repeat_spin(step,max(55,delay-12)))
+
+    def stop_repeat(self):
+        if getattr(self,'repeat_job',None) is not None:
+            self.screen.after_cancel(self.repeat_job)
+            self.repeat_job=None
+
+    def wheel_release(self,event):
+        self.stop_repeat()
+        c=self.screen
+        if self.press is None:
+            return
+        x,y=self.press
+        self.press=None
+        if self.repeated:
+            return
+        dy=(event.y-c.offset[1])/c.scale-y
+        dx=(event.x-c.offset[0])/c.scale-x
+        if 307<=x<=493 and 361<=y<=525 and abs(dy)>=24 and abs(dy)>abs(dx):
+            steps=max(1,round(abs(dy)/42))
+            self.spin(steps if dy<0 else -steps)
+        elif abs(dy)<24 and abs(dx)<24:
+            c.tap(event)
+
+    def spin(self, step):
+        self.wheel=(self.wheel+step)%len(CHARACTERS)
+        self.draw_entry()
+
+    def append_selected(self):
+        self.key(CHARACTERS[self.wheel])
+
+    def keyboard(self,event):
+        if event.keysym=='Escape': self.close()
+        elif event.keysym=='Return': self.go()
+        elif event.keysym=='BackSpace': self.key('back')
+        elif event.keysym in ('Up','Down'): self.spin(-1 if event.keysym=='Up' else 1)
+        elif event.char and event.char.upper() in tuple(CHARACTERS):
+            self.key(event.char.upper())
+        return 'break'
 
     def key(self,key):
         current=self.code.get()
         self.code.set('' if key=='clear' else current[:-1] if key=='back' else (current+key)[:7])
+        self.message.set('')
+        self.draw_entry()
 
     def go(self):
         try:
             airport=lookup(self.display.catalog,self.code.get())
             self.display.choose_airport(airport['ident'],remember=True)
-        except (ValueError,OSError) as exc:self.message.set(str(exc));return
+        except (ValueError,OSError) as exc:
+            self.message.set(str(exc))
+            self.draw_entry()
+            return
         self.close()
 
     def nearby(self):
         # Clearing the pinned airport is explicit. A missing GPS fix does not
         # invent a location from traffic or change the actual ownship reference.
         try:self.display.remember_airport('')
-        except OSError as exc:self.message.set(str(exc));return
+        except OSError as exc:
+            self.message.set(str(exc));self.draw_entry();return
         self.display.airport_selected=None
         fix=getattr(self.display,'airport_fix',None)
         now=time.time()
@@ -74,6 +173,9 @@ class Selector:
 
     def nearby_page(self):
         self.clear()
+        self.frame.configure(highlightthickness=2)
+        self.frame.place_configure(relwidth=.70,relheight=.70)
+        self.body.pack_configure(padx=12,pady=8)
         tk.Label(self.body,text='Nearby airports',bg=BG,fg=FG,font=('DejaVu Sans',17)).pack(pady=10)
         tk.Label(self.body,text='Nearest at selection time · within 200 NM',bg=BG,fg=FG,font=('DejaVu Sans',10)).pack(pady=4)
         if not self.near:

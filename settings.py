@@ -21,7 +21,7 @@ import tempfile
 # These defaults are also used by Restore defaults. Adding a preference here gives older
 # settings files a compatible value; validate() and Setup must understand the same key.
 DEFAULTS = dict(manual_airport='', screen_sleep='never', label_size='normal', runway_extensions=True, stratux_ip='192.168.10.1', own_tail='', default_range=10,
-                idle_seconds=10, vertical_threshold_ft=5000, vertical_filter=True, hide_vertical=False,
+                pattern_height_agl=1000, idle_seconds=10, vertical_threshold_ft=5000, vertical_filter=True, hide_vertical=False,
                 horizon_minutes=2, orientation='track-up', ownship_symbol='high-wing', ownship_source='adsb-first', airports_visible=True, ground_map=False, trail_seconds=300)
 SETTINGS_PATH = Path(os.environ.get('FISHFINDER_SETTINGS', str(Path(__file__).resolve().parent/'settings.json')))
 
@@ -40,7 +40,7 @@ def validate(values):
     result['own_tail'] = str(result['own_tail']).strip().upper()
     if len(result['own_tail']) > 16 or any(not (c.isalnum() or c=='-') for c in result['own_tail']):
         raise ValueError('Tail number: use up to 16 letters, numbers or hyphens')
-    for key, low, high in [('idle_seconds',0,300),('vertical_threshold_ft',1000,20000),
+    for key, low, high in [('pattern_height_agl',500,3000),('idle_seconds',0,300),('vertical_threshold_ft',1000,20000),
                            ('horizon_minutes',1,10),('trail_seconds',30,300)]:
         raw=result[key]
         if isinstance(raw,bool) or float(raw)!=int(raw): raise ValueError(f'{key}: use a whole number')

@@ -23,7 +23,8 @@ import settings
 from airport_data import AirportCatalog
 import update_airports
 
-BG='#071710'; FG='#e0f2ef'
+from ff_controls import BG, RoundedButton
+FG='#e0f2ef'
 
 
 class Setup:
@@ -55,7 +56,7 @@ class Setup:
         fields=([('default_range','Range (NM)'),('label_size','Label size'),('orientation','Map orientation'),('ownship_symbol','Ownship airplane'),
                  ('horizon_minutes','Projection (minutes)'),('idle_seconds','Hide controls (seconds)'),('trail_seconds','Trail (seconds)')]
                 if index==0 else [('stratux_ip','Stratux IP'),('own_tail','Your tail number'),
-                                  ('ownship_source','Ownship preference'),('vertical_threshold_ft','Altitude limit (feet)'),('screen_sleep','Screen sleep (minutes)')])
+                                  ('ownship_source','Ownship preference'),('vertical_threshold_ft','Altitude limit (feet)'),('screen_sleep','Screen sleep (minutes)'),('pattern_height_agl','Fallback pattern height (ft AGL)')])
         form=tk.Frame(self.page,bg=BG);form.pack()
         choices={'screen_sleep':('never','5','10','20','30','60'),'label_size':('normal','large','extra-large'),'default_range':('2','5','10','20'),'orientation':('track-up','north-up'),
                  'ownship_symbol':('high-wing','low-wing','twin'),'ownship_source':('adsb-first','stratux-first')}
@@ -80,7 +81,7 @@ class Setup:
             self.button(controls,'Restore defaults',self.defaults).grid(row=1,column=1,padx=3,pady=3,sticky='ew')
 
     def button(self,parent,label,command):
-        return tk.Button(parent,text=label,command=command,bg='#183b2d',fg=FG,font=('DejaVu Sans',11),padx=8,pady=6)
+        return RoundedButton(parent,label,command,role='confirm' if label=='Save / Back' else 'cancel' if label=='Cancel / Back' else 'nav')
 
     def show_keyboard(self, entry):
         self.focus=entry
@@ -144,7 +145,7 @@ class Setup:
         self.status.set('Checking internet and downloading airport data…')
         def work():
             try:
-                count=update_airports.refresh(self.display.args.airports)
+                count=update_airports.refresh(self.display.args.airports,progress=lambda message:self.jobs.put((None,message)))
                 self.jobs.put((True,f'Installed {count:,} airports. Rejoin Stratux Wi-Fi when ready.'))
             except Exception as exc:self.jobs.put((False,f'Update failed; previous data retained: {exc}'))
         threading.Thread(target=work,daemon=True,name='airport-update').start()
@@ -153,6 +154,10 @@ class Setup:
         if self.closed:return
         try:
             success,message=self.jobs.get_nowait()
+            if success is None:
+                self.status.set(message)
+                self.frame.after(50,self.poll)
+                return
             self.busy=False
             if self.refresh_button:self.refresh_button.configure(state='normal')
             self.status.set(message)

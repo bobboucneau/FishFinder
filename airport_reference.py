@@ -66,7 +66,7 @@ def pattern(a,end):
 
 # Prefer published runway-specific/published airport pattern altitude, otherwise return a
 # clearly identified standard-derived MSL fallback when appropriate.
-def pattern_altitude(a,runway):
+def pattern_altitude(a,runway,fallback_agl=1000):
     ref=current_reference(a)
     if not ref or ref.get('tower')!='non-towered' or not simple_airport(a):return None,''
     altitude=ref.get('pattern_msl_ft')
@@ -82,7 +82,7 @@ def pattern_altitude(a,runway):
     values={value for scope,value in scoped if scope==ends}
     if len(values)==1:return round(elev+values.pop()),'Published runway AGL converted to MSL'
     if values:return None,''
-    return round(elev+1000),'Standard-derived · verify local procedures'
+    return round(elev+fallback_agl),'Standard-derived · verify local procedures'
 
 # Lay out airport name, elevation, radios, pattern details, runway sketch and actions across
 # the round screen.
@@ -122,13 +122,14 @@ def draw(d,a):
             label=' · '.join(f"{runway.get(k,'?')} {pattern(a,runway.get(k)) or 'pattern unavailable'}" for k in ('le_ident','he_ident'))
         else:label='Pattern direction unavailable'
         d.text(400,282,label,size=16,width=600*d.unit)
-        altitude,provenance=pattern_altitude(a,runway)
+        fallback=d.config.get('pattern_height_agl',1000)
+        altitude,provenance=pattern_altitude(a,runway,fallback)
         # Keep the visual marker and footnote tied to the data's provenance. A field-
-        # plus-1,000-foot estimate must not look identical to a published airport-specific
+        # plus-configured-height estimate must not look identical to a published airport-specific
         # altitude.
         standard=provenance.startswith('Standard')
         d.text(400,316,(f'Pattern {altitude:,.0f} ft MSL'+(' *' if standard else '')) if altitude is not None else 'Pattern altitude unavailable',size=18,fill='#ffd45c' if standard else '#e0f2ef')
-        if provenance:d.text(400,341,'* Field + 1,000 ft; verify local procedures' if standard else provenance,size=10,fill='#ffd45c' if standard else '#9fb8c6')
+        if provenance:d.text(400,341,f'* Field + {fallback:,} ft AGL; verify local procedures' if standard else provenance,size=10,fill='#ffd45c' if standard else '#9fb8c6')
         diagram(d,a,runway)
         if len(runways(a))>1:
             for i,r in enumerate(runways(a)):
@@ -139,7 +140,7 @@ def draw(d,a):
 # Add navigation controls and visible source/freshness information below the diagram or data
 # page.
 def buttons(d,a):
-    d.airport_button(190,654,322,703,'Reference' if d.airport_runways else 'Radios / data','view')
+    d.airport_button(190,654,322,703,'Back to airport' if d.airport_runways else 'Radios / data','view')
     d.airport_button(334,654,466,703,'Select airport','select')
     d.airport_button(478,654,610,703,'Back to traffic','close')
     ref=a.get('reference',{})
@@ -155,7 +156,7 @@ def detail_page(d,a):
     for f in a.get('frequencies',[]):rows.append(f"{f.get('type','Radio')} {f.get('frequency_mhz','?')} · {f.get('description','')}")
     rows+=a.get('reference',{}).get('pattern_remarks',[])
     if a.get('reference',{}).get('tower')=='towered':rows.append('Tower hours are not evaluated. Pattern arrows are omitted at all times.')
-    rows.append('Standard-derived altitude uses field elevation + 1,000 ft for light piston GA; it is not a verified local altitude.')
+    rows.append(f"Calculated altitude uses field elevation + {d.config.get('pattern_height_agl',1000):,} ft AGL from Setup; it is not a verified local altitude.")
     rows.append('Turn arrows indicate pattern side, not a flight path or permission to depart.')
     rows.append('Runway sketch only: no taxiways, obstacles or operational restrictions depicted.')
     rows.append('Sources: OurAirports + FAA NASR where available.')

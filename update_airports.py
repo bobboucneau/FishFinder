@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import urllib.request
+from download_progress import read_download, stage, report
 from fs_checks import write_problem
 from airport_data import coordinates
 
@@ -34,7 +35,7 @@ RUNWAY_FIELDS = ('length_ft','width_ft','surface','lighted','closed','le_ident',
 def fetch(name):
     request = urllib.request.Request(BASE+name, headers={'User-Agent':'FishFinder-reference-cache/0.2'})
     with urllib.request.urlopen(request, timeout=90) as response:
-        data = response.read(40_000_001)
+        data = read_download(response, name, 40_000_000)
     if len(data) > 40_000_000:
         raise ValueError('Dataset exceeds download size limit')
     rows = csv.DictReader(io.StringIO(data.decode('utf-8-sig')))
@@ -78,7 +79,9 @@ def _refresh(output, countries=None):
     if countries is None:
         try: countries=json.loads(output.read_text()).get('countries',[])
         except (OSError,ValueError): countries=[]
-    data=build(fetch('airports.csv'),fetch('runways.csv'),fetch('airport-frequencies.csv'),countries)
+    tables = [fetch(name) for name in ("airports.csv","runways.csv","airport-frequencies.csv")]
+    stage("Validating airport tables…")
+    data=build(*tables,countries)
     # Reject a suspiciously truncated update under the same regional scope.
     # Compare a new download with the installed catalog only when their region filters agree.
     # A large unexplained loss of airports could mean a truncated or wrong download.
@@ -96,6 +99,7 @@ def _refresh(output, countries=None):
     if any(a.get('country')=='US' for a in data['airports']):
         from faa_airports import fetch_enrichment
         fetch_enrichment(data)
+    stage('Validating and installing airport data…')
     data['update_interval_days']=28
     output.parent.mkdir(parents=True,exist_ok=True)
     temp = None
@@ -115,7 +119,7 @@ def _refresh(output, countries=None):
 
 # Acquire a nonblocking update lock before starting the actual replacement, so simultaneous
 # update requests do not race.
-def refresh(output,countries=None):
+def refresh(output,countries=None,progress=None):
     import fcntl
     output=Path(output)
     problem=write_problem(output,atomic=True)
@@ -125,7 +129,9 @@ def refresh(output,countries=None):
     with output.with_suffix('.update.lock').open('a') as lock:
         try:fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         except BlockingIOError:raise RuntimeError('Airport update already in progress') from None
-        return _refresh(output,countries)
+        token=report.set(progress)
+        try:return _refresh(output,countries)
+        finally:report.reset(token)
 
 # Compare the snapshot age and FAA effective dates with today to determine whether an update
 # is due.

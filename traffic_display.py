@@ -445,12 +445,18 @@ class Display:
         self.target_choices=[]; self.choice_page=0; self.choice_buttons=[]
         self.selected=None; self.hits=[]; self.buttons=[]
         self.exit_pending=False
+        self.power_pending=False
+        self.power_message=""
+        # This acknowledgement belongs to this display session only. Never save
+        # it in settings: every application startup requires a deliberate tap.
+        self.notice_pending=getattr(args,'startup_notice',False)
         self.catalog=AirportCatalog(args.airports)
         from update_airports import AutomaticUpdates
         # Internet availability enables manual updates; never start a data
         # download automatically during flight or a receiver connection check.
         self.airport_updates=None
-        self.airport_selected=self.config.get('manual_airport') if self.config.get('manual_airport') in self.catalog.airports else None
+        # Remember the airport in settings, but open the traffic map at startup.
+        self.airport_selected=None
         self.airport_selector=None;self.airport_runways=False;self.airport_page=0
         self.airports_visible=self.config['airports_visible']; self.airport_hits=[]; self.airport_buttons=[]
         self.airport_query=None; self.airport_query_time=0.0; self.near_airports=[]
@@ -674,6 +680,10 @@ class Display:
         radius=398*self.unit;self.pixels=radius/self.radius_nm
         self.hits=[]; self.buttons=[];self.label_boxes=[];now=time.time()
         self.label_factor=settings.label_scale(self.config,self.radius_nm)
+        if self.notice_pending:
+            self.draw_notice()
+            if self.exit_pending:self.draw_exit_dialog()
+            return
         self.idle=bool(self.config['idle_seconds'] and time.monotonic()-self.last_touch>=self.config['idle_seconds'] and
                        not (self.exit_pending or self.setup_panel))
         snap=self.snapshot
@@ -887,10 +897,6 @@ class Display:
         self.text(400,68,'FISHFINDER'+(' · DEMO' if snap.demo or (snap.receiver and snap.receiver[2].startswith('DEMO:')) else ''),size=17)
         self.text(400,96,mode,fill=WHITE if fix else YELLOW,size=12)
         self.text(400,119,f'{self.config["horizon_minutes"]} min · purple dashed = estimated · gray = distant',fill=MUTED,size=10)
-        if self.ground and ground_allowed:
-            self.rect(318,226,482,257,fill='#10251f',outline='#345247')
-            self.text(400,242,'Map '+('OFF','LOW','NORMAL')[self.ground_level],size=11)
-            self.buttons.append((318,226,482,257,self.cycle_ground))
         if snap.error:
             self.text(400,450,'DATABASE UNAVAILABLE',fill=RED,size=15)
             self.text(400,476,snap.error,fill=MUTED,size=10,width=380*self.unit)
@@ -903,19 +909,16 @@ class Display:
         self.text(400,683,footer,fill=MUTED,size=10)
         for i,scale in enumerate((2,5,10,20)):
             x=269+i*87
-            self.rect(x-38,699,x+38,743,fill='#17372d' if scale==self.radius_nm else '#0a1814',outline=GREEN if scale==self.radius_nm else '#345247',width=2)
+            self.surface_box((x-38,699,x+38,743),'confirm' if scale==self.radius_nm else 'nav')
             self.text(x,721,f'{scale} NM',size=12)
             self.buttons.append((x-38,699,x+38,743,lambda s=scale:self.set_range(s)))
         if not fix:
             self.rect(302,631,498,657,fill='#10251f',outline='#345247')
             self.text(400,644,'Recenter traffic',size=10)
             self.buttons.append((302,631,498,657,self.recenter))
-        self.rect(220,165,394,211,fill='#10253d',outline=BLUE)
-        self.text(307,188,'Airport',size=13)
-        self.buttons.append((220,165,394,211,self.open_airport_selector))
-        self.rect(406,165,580,211,fill='#10251f',outline='#345247')
-        self.text(493,188,'Setup',size=13)
-        self.buttons.append((406,165,580,211,self.open_setup))
+        self.scope_button((220,165,394,211),'Airport',self.open_airport_selector)
+        self.scope_button((406,165,580,211),'Setup',self.open_setup)
+        self.scope_button((325,226,475,282),'Power',self.request_poweroff,'cancel')
         if self.idle:
             # Main overlay controls are drawn last. Remove them without affecting map graphics.
             for item in c.find_all()[overlay_start:]: c.delete(item)
@@ -955,14 +958,55 @@ class Display:
             tx,ty,_=self.touch_mark
             c.create_oval(tx-5,ty-5,tx+5,ty+5,outline='#ff88ff',width=2)
             self.text(400,655,f'Touch received at {tx}, {ty}',fill='#ff88ff',size=10)
-        if self.exit_pending:
-            self.rect(210,285,590,515,fill='#071710',outline=WHITE,width=2)
-            self.text(400,326,'Close traffic display?',size=19)
-            self.text(400,376,'The collector keeps running.',fill=MUTED,size=13)
-            self.rect(245,435,390,485,fill='#183b2d',outline=GREEN,width=2)
-            self.text(318,460,'Cancel',size=14)
-            self.rect(410,435,555,485,fill='#3b181b',outline=RED,width=2)
-            self.text(482,460,'Exit',size=14)
+        from fs_checks import database_notice
+        if getattr(self.args,"db",None) and database_notice(self.args.db).is_file():
+            self.rect(115,325,685,475,fill='#31191e',outline=RED,width=2)
+            self.text(400,365,'Database check failed',size=19)
+            self.text(400,420,'Recording stopped. Data preserved. Restore a verified backup before restarting.',size=13,width=500*self.unit)
+        if self.exit_pending:self.draw_exit_dialog()
+
+    def surface_box(self,bounds,role='panel'):
+        from ff_controls import rounded_box
+        def points(*values):
+            return tuple((self.cx if i%2==0 else self.cy)+(v-400)*self.unit
+                         for i,v in enumerate(values))
+        rounded_box(self.canvas,bounds,points,self.unit,role)
+
+    def scope_button(self,bounds,label,action,role='nav',size=13):
+        self.surface_box(bounds,role)
+        x,y,u,v=bounds
+        self.text((x+u)/2,(y+v)/2,label,size=size)
+        self.buttons.append((*bounds,action))
+
+    def draw_exit_dialog(self):
+        self.surface_box((165,270,635,530))
+        self.text(400,311,'Shut down FishFinder?' if self.power_pending else 'Close traffic display?',size=19)
+        message=(self.power_message or 'Wait 5–10 seconds after the screen goes dark before unplugging.') if self.power_pending else 'The collector keeps running.'
+        self.text(400,373,message,fill=MUTED,size=13,width=400*self.unit)
+        self.surface_box((245,435,390,485),'edit')
+        self.text(318,460,'Cancel',size=14)
+        self.surface_box((410,435,555,485),'cancel')
+        self.text(482,460,'Shut down' if self.power_pending else 'Exit',size=14)
+
+    def draw_notice(self):
+        from safety_notice import PARAGRAPHS
+        self.canvas.create_oval(self.cx-394*self.unit,self.cy-394*self.unit,
+                               self.cx+394*self.unit,self.cy+394*self.unit,
+                               outline=BLUE,width=4*self.unit)
+        self.surface_box((245,90,555,161))
+        self.text(400,126,'FLIGHT SAFETY NOTICE',size=18)
+        for y,paragraph in zip((225,340,455),PARAGRAPHS):
+            self.text(400,y,paragraph,size=16,width=535*self.unit)
+        self.text(400,552,'Supplemental awareness · keep looking outside',size=12,fill=MUTED)
+        self.scope_button((195,590,605,666),'I understand these limitations',self.acknowledge_notice,'confirm',16)
+        self.scope_button((325,686,475,741),'Power',self.request_poweroff,'cancel',13)
+
+    def acknowledge_notice(self):
+        # No timer, screen-wide tap, or saved preference can acknowledge this.
+        if self.network_panel:return
+        self.notice_pending=False
+        self.last_touch=time.monotonic()
+        self.draw()
 
     # Cycle map brightness/off state and redraw without changing the traffic data.
     def cycle_ground(self):
@@ -1068,7 +1112,7 @@ class Display:
 
     # Draw a touch button and register its clickable rectangle only when enabled.
     def airport_button(self,x1,y1,x2,y2,label,action,enabled=True):
-        self.rect(x1,y1,x2,y2,fill='#10253d' if enabled else '#111b24',outline=BLUE if enabled else '#35434f')
+        self.surface_box((x1,y1,x2,y2),'nav' if enabled else 'off')
         self.text((x1+x2)/2,(y1+y2)/2,label,size=11,fill=WHITE if enabled else '#63717c')
         if enabled:
             self.airport_buttons.append((x1,y1,x2,y2,action))
@@ -1116,8 +1160,30 @@ class Display:
     # Show a confirmation panel instead of immediately destroying the display on a single
     # accidental touch.
     def request_exit(self):
+        self.power_pending=False
         self.exit_pending=True
         self.draw()
+
+    def request_poweroff(self):
+        self.power_pending=True
+        self.power_message=''
+        self.exit_pending=True
+        self.draw()
+
+    def poweroff(self):
+        import subprocess
+        if self.power_message.startswith('Shutting'):
+            return
+        self.power_message='Shutting down… please wait.'
+        self.draw()
+        self.root.update_idletasks()
+        def run():
+            try:
+                subprocess.run(['/usr/bin/sudo','-n','/usr/bin/systemctl','poweroff'],
+                               check=True,timeout=10,capture_output=True)
+            except (OSError,subprocess.SubprocessError):
+                self.power_message='Shutdown unavailable. Ask the administrator to enable it.'
+        threading.Thread(target=run,daemon=True).start()
 
     # Select the radius in nautical miles and redraw at the new scale.
     def set_range(self,value):
@@ -1222,7 +1288,7 @@ class Display:
         x=(event.x-self.cx)/self.unit+400;y=(event.y-self.cy)/self.unit+400
         # Visible controls and popup actions never wait for a second tap.
         popup=bool(self.selected or self.airport_selected or self.target_choices)
-        immediate=(self.exit_pending or self.target_choices or
+        immediate=(self.notice_pending or self.exit_pending or self.target_choices or
             (self.selected and 322<=x<=478 and 571<=y<=602) or
             (self.airport_selected and any(x1<=x<=x2 and y1<=y<=y2
                 for x1,y1,x2,y2,_ in self.airport_buttons)) or
@@ -1260,10 +1326,15 @@ class Display:
         x=(event.x-self.cx)/self.unit+400;y=(event.y-self.cy)/self.unit+400
         if self.exit_pending:
             if 410<=x<=555 and 435<=y<=485:
-                self.close()
+                if self.power_pending:self.poweroff()
+                else:self.close()
             elif 245<=x<=390 and 435<=y<=485:
                 self.exit_pending=False
                 self.draw()
+            return
+        if self.notice_pending:
+            for x1,y1,x2,y2,action in self.buttons:
+                if x1<=x<=x2 and y1<=y<=y2:action();return
             return
         if self.target_choices:
             for x1,y1,x2,y2,action in self.choice_buttons:
@@ -1365,6 +1436,7 @@ def main():
     parser.add_argument('--range',type=int,choices=(2,5,10,20),default=None)
     parser.add_argument('--splash-seconds',type=float,default=3,help='Startup splash duration; 0 disables, tap dismisses')
     args=parser.parse_args()
+    args.startup_notice=True
     if args.map_data and args.demo_map:parser.error('Choose either --map-data or --demo-map')
     if args.map_data and args.map_data.suffix not in ('.sqlite','.pmtiles'):parser.error('--map-data must name a .sqlite or .pmtiles map file')
     if args.demo_map and not args.demo:parser.error("--demo-map requires the moving --demo")
