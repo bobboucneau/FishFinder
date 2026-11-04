@@ -146,9 +146,10 @@ def draw(d,a):
 # Add navigation controls and visible source/freshness information below the diagram or data
 # page.
 def buttons(d,a):
-    d.airport_button(190,654,322,703,'Back to airport' if d.airport_runways else 'Radios / data','view')
-    d.airport_button(334,654,466,703,'Select airport','select')
-    d.airport_button(478,654,610,703,'Back to traffic','close')
+    d.airport_button(153,654,271,703,'Back to airport' if d.airport_runways else 'Radios / data','view')
+    d.airport_button(278,654,396,703,'Show on map','map')
+    d.airport_button(403,654,521,703,'Select airport','select')
+    d.airport_button(528,654,646,703,'Back to traffic','close')
     ref=a.get('reference',{})
     source=f"FAA effective {ref.get('effective')} · expires {ref.get('expires')}" if ref else 'Pattern source unavailable'
     if ref and not current_reference(a):source='FAA data expired · update airports'

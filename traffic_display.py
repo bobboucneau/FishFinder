@@ -457,6 +457,7 @@ class Display:
         self.airport_updates=None
         # Remember the airport in settings, but open the traffic map at startup.
         self.airport_selected=None
+        self.airport_map=None;self.airport_map_state=None
         self.airport_selector=None;self.airport_runways=False;self.airport_page=0
         self.airports_visible=self.config['airports_visible']; self.airport_hits=[]; self.airport_buttons=[]
         self.airport_query=None; self.airport_query_time=0.0; self.near_airports=[]
@@ -686,6 +687,8 @@ class Display:
             return
         self.idle=bool(self.config['idle_seconds'] and time.monotonic()-self.last_touch>=self.config['idle_seconds'] and
                        not (self.exit_pending or self.setup_panel))
+        airport_map=self.catalog.airports.get(self.airport_map) if self.airport_map else None
+        if airport_map:self.idle=False
         snap=self.snapshot
         # Limit the usable trail and choose an ownship source before drawing. Matching
         # ownship traffic is removed from the ordinary target list so the same aircraft is
@@ -695,7 +698,13 @@ class Display:
         # Do not keep calling a stale last-known position a current ownship fix. Without a
         # usable fix, choose a reference center and make uncertainty visible.
         fix=own[-1] if own and now-own[-1].time<=OWN_AGE and not snap.error else None
-        if fix:
+        if airport_map:
+            # Browsing an airport must not change actual ownship or the main
+            # map's last-fix/fallback anchor. It only changes this drawing origin.
+            origin=(airport_map['lat'],airport_map['lon'])
+            ov=velocity(own) if fix else None
+            mode=airport_map['code']+' · AIRPORT CENTERED'
+        elif fix:
             origin=(fix.lat,fix.lon);self.last_own=origin
             ov=velocity(own)
             mode='OWN GPS · NORTH UP'
@@ -717,7 +726,8 @@ class Display:
                 origin=None;mode='WAITING FOR POSITION DATA'
         own_heading=None if ov is None or math.hypot(*ov)<1e-10 else math.degrees(math.atan2(ov[0],ov[1]))%360
         self.map_heading=own_heading if self.config['orientation']=='track-up' and own_heading is not None else 0.0
-        if fix:mode=self.own_source+' · '+('TRACK UP' if self.config['orientation']=='track-up' and own_heading is not None else 'NORTH UP')
+        if airport_map:self.map_heading=0.0
+        if fix and not airport_map:mode=self.own_source+' · '+('TRACK UP' if self.config['orientation']=='track-up' and own_heading is not None else 'NORTH UP')
         if self.ground:self.ground.poll()
         # A bundled local demo map is not a worldwide chart. Decide whether this map source
         # applies before drawing it; the separate worldwide archive is handled as global
@@ -733,7 +743,7 @@ class Display:
         for fraction in (0.25,0.5,0.75,1):
             r=radius*fraction
             c.create_oval(self.cx-r,self.cy-r,self.cx+r,self.cy+r,outline='#285449',width=1)
-            self.text(580 if not self.idle and fraction in (0.5,0.75) else 426,400-398*fraction+13,f'{self.radius_nm*fraction:g} NM',fill=MUTED,size=9,anchor='w')
+            self.text(580 if not self.idle and not airport_map and fraction in (0.5,0.75) else 426,400-398*fraction+13,f'{self.radius_nm*fraction:g} NM',fill=MUTED,size=9,anchor='w')
         c.create_line(self.cx-radius,self.cy,self.cx+radius,self.cy,fill='#112921')
         c.create_line(self.cx,self.cy-radius,self.cx,self.cy+radius,fill='#112921')
         for label,bearing in [('N',0),('E',90),('S',180),('W',270)]:
@@ -804,12 +814,18 @@ class Display:
                 c.create_text(left,top,text=label,anchor='nw',fill=airport_color(airport),font=('DejaVu Sans',max(9,int(11*self.unit*self.label_factor))),tags='map-label')
                 boxes.append(box)
             self.label_boxes=boxes
+        if airport_map:
+            from airport_map import draw_link
+            draw_link(self,airport_map,fix)
         if origin:
-            if fix:
-                self.hits.append((self.cx,self.cy,'__ownship__'))
+            ownpos=xy(fix.lat,fix.lon,origin) if fix else None
+            if fix and (not airport_map or math.hypot(*ownpos)<=self.radius_nm):
+                ownscreen=rotate(ownpos,self.map_heading)
+                ox,oy=self.cx+ownscreen[0]*self.pixels,self.cy-ownscreen[1]*self.pixels
+                self.hits.append((ox,oy,'__ownship__'))
                 self.trail_lines([xy(p.lat,p.lon,origin) for p in own],WHITE,tags="ownship-trail")
                 if ov is not None:
-                    self.line((0,0),(ov[0]*self.projection_seconds,ov[1]*self.projection_seconds),WHITE,dash=(4,5),width=1,tags="ownship-projection")
+                    self.line(ownpos,(ownpos[0]+ov[0]*self.projection_seconds,ownpos[1]+ov[1]*self.projection_seconds),WHITE,dash=(4,5),width=1,tags="ownship-projection")
                 # Original small aircraft silhouette, drawn above its trail/projection.
                 angle=(own_heading or 0)-self.map_heading
                 shapes={
@@ -830,7 +846,7 @@ class Display:
                 # screen pixels.
                 def aircraft_points(points):
                     return [n for x,y in (rotate(p,-angle) for p in points)
-                            for n in (self.cx+x*self.unit,self.cy-y*self.unit)]
+                            for n in (ox+x*self.unit,oy-y*self.unit)]
                 c.create_polygon(*aircraft_points(outline),outline=WHITE,fill=WHITE,width=1,tags='ownship-symbol')
                 if style=='twin':
                     for side in (-1,1):
@@ -839,7 +855,7 @@ class Display:
                         c.create_line(*aircraft_points([(side*7-3,8),(side*7+3,8)]),fill=WHITE,width=1,tags='ownship-symbol')
                 c.create_polygon(*aircraft_points([(-1.4,9),(1.4,9),(1.5,3),(-1.5,3)]),
                                  outline=BG,fill=BG,tags='ownship-symbol')
-            else:
+            elif not airport_map:
                 c.create_oval(self.cx-5*self.unit,self.cy-5*self.unit,self.cx+5*self.unit,self.cy+5*self.unit,outline=MUTED)
                 if not self.idle: self.text(400,420,'REFERENCE',fill=MUTED,size=9)
             # For each active aircraft: use its latest position, infer recent movement,
@@ -848,7 +864,7 @@ class Display:
             for tail,history in histories.items():
                 p=history[-1];pos=xy(p.lat,p.lon,origin);tv=velocity(history);age=max(0,now-p.time)
                 if fix:
-                    color,reason,cpa=assess(pos,tv,ov,p.speed,age>10)
+                    color,reason,cpa=assess(xy(p.lat,p.lon,(fix.lat,fix.lon)),tv,ov,p.speed,age>10)
                 else:
                     color,reason,cpa=GREEN,'No ownship fix: assessment unavailable',None
                 clear=bool(fix and vertical_clear(history,own,self.config['vertical_threshold_ft'],HORIZON))
@@ -860,7 +876,7 @@ class Display:
                     reason+=' (green is display-only)'
                 heading=None if tv is None or math.hypot(*tv)<1e-10 else math.degrees(math.atan2(tv[0],tv[1]))%360
                 if p.estimated: reason+=' · Estimated position from Stratux'
-                infos[tail]=(p,color,reason,cpa,heading,age,math.hypot(*pos),fix)
+                infos[tail]=(p,color,reason,cpa,heading,age,math.hypot(*xy(p.lat,p.lon,(fix.lat,fix.lon))) if fix else math.hypot(*pos),fix)
                 if math.hypot(*pos)>self.radius_nm:
                     outside+=1;continue
                 # Bound Tk canvas work while preserving the full stored history.
@@ -892,6 +908,13 @@ class Display:
         if origin and ground_allowed and self.ground and self.ground_level:self.draw_town_labels(origin)
         # Remember where the control overlay starts. Idle mode can remove buttons/general
         # text while preserving aircraft labels, airport labels and range-ring distances.
+        if airport_map:
+            # Always identify the chosen airport, even if other airports are off.
+            color=airport_color(airport_map)
+            c.create_rectangle(self.cx-7*self.unit,self.cy-7*self.unit,
+                               self.cx+7*self.unit,self.cy+7*self.unit,
+                               fill=color,outline=color,tags='airport-map-center')
+            self.text(416,420,airport_map['code'],size=13,fill=color,anchor='w')
         overlay_start=len(c.find_all())
         self.rect(215,50,585,131,fill=BG,outline='')
         self.text(400,68,'FISHFINDER'+(' · DEMO' if snap.demo or (snap.receiver and snap.receiver[2].startswith('DEMO:')) else ''),size=17)
@@ -919,13 +942,18 @@ class Display:
         self.scope_button((220,165,394,211),'Airport',self.open_airport_selector)
         self.scope_button((406,165,580,211),'Setup',self.open_setup)
         self.scope_button((325,226,475,282),'Power',self.request_poweroff,'cancel')
+        if airport_map:
+            for item in c.find_all()[overlay_start:]:c.delete(item)
+            self.buttons=[]
+            from airport_map import controls
+            controls(self,airport_map,fix,now)
         if self.idle:
             # Main overlay controls are drawn last. Remove them without affecting map graphics.
             for item in c.find_all()[overlay_start:]: c.delete(item)
             self.buttons=[]
         if self.idle and not fix:
             self.text(400,96,'NO OWN GPS · reference center',fill=YELLOW,size=12)
-        if not snap.demo:
+        if not snap.demo and not airport_map:
             receiver=snap.receiver
             message='Waiting for collector...'
             if receiver and 0<=now-receiver[0]<=15:
@@ -1099,6 +1127,7 @@ class Display:
     def airport_action(self,action):
         if action=='close': self.airport_selected=None
         elif action=='select':self.open_airport_selector()
+        elif action=='map':self.show_airport_map()
         elif action.startswith('runway:'): self.airport_runway_index=int(action.split(':')[1])
         elif action=='view': self.airport_runways=not self.airport_runways;self.airport_page=0
         elif action=='next': self.airport_page+=1
@@ -1109,6 +1138,24 @@ class Display:
     def airport_details(self):
         from airport_reference import draw
         draw(self,self.catalog.airports[self.airport_selected])
+
+    def show_airport_map(self):
+        if not self.airport_selected:return
+        self.airport_map_state=(self.radius_nm,self.airport_runways,self.airport_page,
+                                getattr(self,'airport_runway_index',None))
+        self.airport_map=self.airport_selected
+        self.airport_selected=None;self.selected=None;self.target_choices=[]
+        self.airport_query=None;self.last_touch=time.monotonic()
+        self.draw()
+
+    def close_airport_map(self):
+        if not self.airport_map:return
+        ident=self.airport_map
+        self.radius_nm,self.airport_runways,self.airport_page,self.airport_runway_index=self.airport_map_state
+        self.airport_map=None;self.airport_map_state=None
+        self.airport_selected=ident if ident in self.catalog.airports else None
+        self.airport_query=None;self.last_touch=time.monotonic()
+        self.draw()
 
     # Draw a touch button and register its clickable rectangle only when enabled.
     def airport_button(self,x1,y1,x2,y2,label,action,enabled=True):
@@ -1290,7 +1337,7 @@ class Display:
         x=(event.x-self.cx)/self.unit+400;y=(event.y-self.cy)/self.unit+400
         # Visible controls and popup actions never wait for a second tap.
         popup=bool(self.selected or self.airport_selected or self.target_choices)
-        immediate=(self.notice_pending or self.exit_pending or self.target_choices or
+        immediate=(bool(self.airport_map) or self.notice_pending or self.exit_pending or self.target_choices or
             (self.selected and 322<=x<=478 and 571<=y<=619) or
             (self.airport_selected and any(x1<=x<=x2 and y1<=y<=y2
                 for x1,y1,x2,y2,_ in self.airport_buttons)) or
@@ -1335,6 +1382,10 @@ class Display:
                 self.draw()
             return
         if self.notice_pending:
+            for x1,y1,x2,y2,action in self.buttons:
+                if x1<=x<=x2 and y1<=y<=y2:action();return
+            return
+        if self.airport_map:
             for x1,y1,x2,y2,action in self.buttons:
                 if x1<=x<=x2 and y1<=y<=y2:action();return
             return
