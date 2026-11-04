@@ -131,6 +131,18 @@ class NetworkScreen:
 
     def connected(self,result):
         self.connection_id,self.capabilities=result
+        saved=self.manager.profiles.match(self.selected.bssid)
+        if self.startup and saved and self.capabilities.get('stratux_ip'):
+            # This exact BSSID was already enrolled by the owner. Reconnecting is
+            # not a new-device enrollment: reuse its name and preference, even if
+            # the receiver has no GPS fix or Internet access.
+            try:self.use_connection(saved['name'])
+            except (ValueError,OSError) as exc:
+                self.name_page()
+                self.message.set(str(exc))
+                return
+            self.close()
+            return
         self.name_page()
 
     def name_page(self):
@@ -197,16 +209,23 @@ class NetworkScreen:
                 self.button('Change name',self.conflict.destroy,self.conflict)
                 self.button('Cancel',self.close)
                 return
-            # Persist the receiver address through the same validated settings file
-            # already watched by the collector. Do not alter actual position data.
-            if self.capabilities['stratux_ip']:
-                values=settings.load();values['stratux_ip']=self.capabilities['stratux_ip']
-                self.display.apply_settings(values)
-            self.display.network_status=name+' · Stratux '+('available' if self.capabilities['stratux_ip'] else 'unavailable')+' · Internet '+('reachable' if self.capabilities['internet'] else 'not confirmed')
+            self.use_connection(name)
             self.manager.profiles.save(self.selected,self.connection_id,name,self.capabilities,
                                        self.preferred.get(),replace)
         except (ValueError,OSError) as exc:self.message.set(str(exc));return
         self.close()
+
+    def use_connection(self,name):
+        # Only a successful, BSSID-verified association reaches this point. Keep
+        # the receiver address in the existing settings file; never key identity
+        # by SSID or friendly name, and do not replace a saved device on reconnect.
+        if self.capabilities['stratux_ip']:
+            values=settings.load()
+            address=self.capabilities['stratux_ip']
+            if values['stratux_ip']!=address:
+                values['stratux_ip']=address
+                self.display.apply_settings(values)
+        self.display.network_status=name+' · Stratux '+('available' if self.capabilities['stratux_ip'] else 'unavailable')+' · Internet '+('reachable' if self.capabilities['internet'] else 'not confirmed')
 
     def keyboard(self,entry):
         # Local keyboard supports lowercase, digits, spaces and punctuation. The
