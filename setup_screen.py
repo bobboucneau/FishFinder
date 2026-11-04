@@ -68,9 +68,11 @@ class Setup:
                 widget.bind('<Button-1>',lambda event,w=widget:self.show_keyboard(w))
             widget.grid(row=row,column=1,padx=7,pady=2)
         if index==0:
-            for key,label in [('vertical_filter','Gray vertically distant aircraft'),('hide_vertical','Hide vertically distant aircraft'),('airports_visible','Show airports'),('ground_map','Show ground map (experiment)'),('runway_extensions','Runway extensions (all ranges)')]:
-                tk.Checkbutton(self.page,text=label,variable=self.vars[key],bg=BG,fg=FG,selectcolor=BG,
-                               activebackground=BG,borderwidth=0,highlightthickness=0,relief='flat').pack(anchor='w',padx=12)
+            for offset,(key,label) in enumerate([('vertical_filter','Gray vertically distant aircraft'),('hide_vertical','Hide vertically distant aircraft'),('airports_visible','Show airports'),('ground_map','Show ground map (experiment)'),('runway_extensions','Runway extensions (all ranges)')]):
+                tk.Checkbutton(form,text=label,variable=self.vars[key],bg=BG,fg=FG,selectcolor=BG,
+                               activebackground=BG,borderwidth=0,highlightthickness=0,relief='flat',
+                               font=('DejaVu Sans',10)).grid(row=len(fields)+offset,column=0,
+                               columnspan=2,sticky='w',padx=8,pady=2)
         else:
             controls=tk.Frame(self.page,bg=BG);controls.pack(fill='x',padx=6,pady=5)
             for column in (0,1):controls.grid_columnconfigure(column,weight=1,uniform='actions')

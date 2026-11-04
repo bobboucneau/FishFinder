@@ -124,15 +124,28 @@ class Launcher:
     def update_prompt(self,pending):
         if self.prompt:return
         self.root.deiconify();self.root.lift();self.root.attributes('-topmost',True)
-        self.prompt=tk.Frame(self.root,bg=BG,highlightbackground=YELLOW,highlightthickness=2)
-        self.prompt.place(relx=.5,rely=.5,anchor='center',relwidth=.68,relheight=.55)
+        # The launcher and application share the same component definitions.
+        # No UI choice below changes the existing install/defer policies.
+        from ff_controls import BG as THEME_BG, RoundScreen
+        self.prompt=tk.Frame(self.root,bg=THEME_BG)
+        self.prompt.place(relx=.5,rely=.5,anchor='center',relwidth=1,relheight=1)
         label='Owner-modified build' if pending['owner_build'] else 'Signature-verified release'
-        tk.Label(self.prompt,text=label+'\n'+pending['release'],bg=BG,fg=FG,font=('DejaVu Sans',15),wraplength=440).pack(pady=20)
-        tk.Label(self.prompt,text='Install only when it is appropriate to interrupt the display.',bg=BG,fg=YELLOW,wraplength=420).pack(pady=8)
         def defer(policy):
             self.store.defer(policy);self.prompt.destroy();self.prompt=None;self.root.attributes('-topmost',False);self.root.withdraw()
-        for text,callback in [('Install now',self.install),('Next startup',lambda:defer('next-start')),('Later',lambda:defer('later'))]:
-            tk.Button(self.prompt,text=text,command=callback,font=('DejaVu Sans',13),padx=16,pady=8).pack(pady=6)
+        def paint():
+            surface.start()
+            surface.box((190,114,610,193))
+            surface.label(400,153,'Update available',30,bold=True)
+            surface.label(400,248,pending['release'],35,bold=True,
+                          width=max(1,round(540*surface.scale)))
+            surface.label(400,305,label,20,color='#a8cce5')
+            surface.label(400,371,'Install only when it is appropriate to interrupt the display.',
+                          21,color='#ffd45c',width=max(1,round(520*surface.scale)))
+            surface.button((200,445,600,523),'Install now',self.install,'confirm',27)
+            surface.button((200,543,600,621),'Next startup',lambda:defer('next-start'),'nav',27)
+            surface.button((265,641,535,710),'Later',lambda:defer('later'),'edit',27)
+        surface=RoundScreen(self.prompt,paint)
+        surface.pack(fill='both',expand=True)
 
     def problem(self,message):
         self.progress(('Needs attention',RED),(message,RED),('Logs: FishFinder/runtime/',YELLOW))

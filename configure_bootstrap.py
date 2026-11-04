@@ -106,7 +106,7 @@ def main():
     for folder in (base,stable,shared,base/'runtime',base/'releases',base/'trusted-keys',base/'inbox'):
         folder.mkdir(parents=True,exist_ok=True);os.chown(folder,account.pw_uid,account.pw_gid);folder.chmod(0o750)
     source=Path(__file__).resolve().parent
-    for name in ('bootstrap.py','release_manager.py','release_tools.py','build_release.py'):
+    for name in ('bootstrap.py','release_manager.py','release_tools.py','build_release.py','ff_controls.py'):
         shutil.copyfile(source/name,stable/name);os.chown(stable/name,account.pw_uid,account.pw_gid)
     for name in ('settings.json','networks.json','airports.json'):
         old=args.previous_app/name
