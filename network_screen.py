@@ -18,7 +18,7 @@ BG='#071710';FG='#e0f2ef';NOTICE='#ffd45c'
 class NetworkScreen:
     def __init__(self,display,startup=False):
         self.display=display;self.startup=startup;self.closed=False;self.busy=False
-        self.jobs=queue.Queue();self.aps=[];self.selected=None;self.capabilities=None;self.connection_id=None
+        self.jobs=queue.Queue();self.aps=[];self.selected=None;self.capabilities=None;self.connection_id=None;self.startup_progress=False
         self.frame=tk.Frame(display.root,bg=BG,highlightbackground=FG,highlightthickness=1)
         self.frame.place(relx=.5,rely=.5,anchor='center',relwidth=.70,relheight=.70)
         self.message=tk.StringVar(value='Looking for networks…')
@@ -31,7 +31,7 @@ class NetworkScreen:
         except (OSError,ValueError) as exc:
             self.label('Saved network settings need attention.')
             self.label(str(exc));self.button('Back / Skip',self.close);return
-        if startup:self.list_page();self.scan(automatic=True)
+        if startup:self.scan(automatic=True)
         else:self.connection_page()
 
     def diagnostic_button(self,label,callback,parent=None):
@@ -132,6 +132,7 @@ class NetworkScreen:
         return widget
 
     def clear(self):
+        self.startup_progress=False
         for child in self.body.winfo_children():child.destroy()
 
     def status(self,size=10):
@@ -150,7 +151,10 @@ class NetworkScreen:
         if self.closed:return
         try:
             done,value,error=self.jobs.get_nowait();self.busy=False
-            if error:self.message.set(error+' Use Wait / Retry or Other networks.');return
+            if error:
+                if getattr(self,'startup_progress',False):self.list_page()
+                self.message.set(error+' Use Wait / Retry or Other networks.')
+                return
             done(value)
         except queue.Empty:self.frame.after(100,self.poll)
 
@@ -172,19 +176,38 @@ class NetworkScreen:
         self.button('Other networks',lambda:self.scan(automatic=False))
         self.button('Skip' if self.startup else 'Back',self.close)
 
+    def progress_page(self):
+        # Do not render an empty chooser while the scan is still incomplete.
+        # The usual job queue keeps Tk responsive during bounded NM/probe work.
+        self.clear();self.startup_progress=True
+        tk.Label(self.body,text='Connecting FishFinder',bg=BG,fg=FG,
+                 font=('DejaVu Sans',19,'bold')).pack(pady=45)
+        self.status(size=16)
+
     def scan(self,automatic=False):
         if self.busy:return
-        self.message.set('Scanning… Wi-Fi changes only after your selection or a saved preferred match.')
+        quiet=self.startup and automatic
+        if quiet:self.progress_page()
+        self.message.set('Looking for preferred Stratux…' if quiet else
+                         'Scanning… Wi-Fi changes only after your selection or a saved preferred match.')
         def complete(aps):
-            self.aps=aps;self.list.delete(0,'end')
-            for ap in aps:
-                saved=self.manager.profiles.match(ap.bssid)
-                title=saved['name'] if saved else ap.ssid
-                self.list.insert('end',f'{title} · {ap.signal}% · {ap.bssid[-8:]}'+(' ✓' if ap.active else ''))
+            self.aps=aps
             kind,ap=nm.selection(self.manager.profiles,aps)
             preferred=self.manager.profiles.data.get('preferred')
             if automatic and kind=='preferred':
-                self.selected=ap;self.message.set('Connecting to preferred receiver…');self.connect();return
+                # Stay on the progress page through association and receiver
+                # verification. connected() continues directly for the saved AP.
+                self.selected=ap
+                self.message.set('Connecting to preferred receiver…')
+                self.connect()
+                return
+            # A complete scan found no automatic preferred match. Only now make
+            # the chooser visible, with the available networks already known.
+            self.list_page()
+            for item in aps:
+                saved=self.manager.profiles.match(item.bssid)
+                title=saved['name'] if saved else item.ssid
+                self.list.insert('end',f'{title} · {item.signal}% · {item.bssid[-8:]}'+(' ✓' if item.active else ''))
             if kind=='alternative':
                 self.list.selection_set(aps.index(ap))
                 self.message.set('Preferred receiver unavailable. Connect to the listed alternative, wait, or choose another network.')
