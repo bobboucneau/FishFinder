@@ -48,6 +48,27 @@ class Tests(unittest.TestCase):
         self.ui.close.assert_not_called();self.ui.name_page.assert_called_once()
         self.assertIsNotNone(self.profiles.duplicate('First Stratux',OTHER.bssid))
 
+    def test_saved_home_network_continues_without_receiver_or_internet(self):
+        home=dict(CAP,stratux_ip=None,internet=False,updates=False)
+        self.profiles.save(OTHER,'home-uuid','Home',home)
+        self.ui.selected=OTHER
+        before=self.profiles.path.read_bytes()
+        self.ui.connected(('home-uuid',home))
+        self.ui.close.assert_called_once()
+        self.ui.name_page.assert_not_called()
+        self.assertEqual(before,self.profiles.path.read_bytes())
+
+    def test_choose_saved_network_connects_immediately(self):
+        self.ui.busy=False
+        self.ui.list=SimpleNamespace(curselection=lambda:(0,))
+        self.ui.aps=[OTHER]
+        self.profiles.save(OTHER,'home-uuid','Home',dict(CAP,stratux_ip=None))
+        self.ui.connect=MagicMock();self.ui.clear=MagicMock()
+        self.ui.choose()
+        self.ui.connect.assert_called_once()
+        self.ui.clear.assert_not_called()
+        self.assertEqual(self.ui.selected,OTHER)
+
     def test_setup_can_still_edit_existing_name(self):
         self.ui.startup=False
         self.ui.connected(('saved-uuid',CAP))

@@ -109,6 +109,12 @@ class NetworkScreen:
         selected=self.list.curselection()
         if not selected:self.message.set('Select a network first.');return
         self.selected=self.aps[selected[0]];ap=self.selected;saved=self.manager.profiles.match(ap.bssid)
+        if saved:
+            # The list already identifies this enrolled BSSID by its saved name.
+            # Connect is the user's explicit choice; no second confirmation or
+            # password/name enrollment is needed for an existing profile.
+            self.connect()
+            return
         self.clear();self.label(saved['name'] if saved else ap.ssid)
         self.label(f'SSID: {ap.ssid}\nBSSID: {ap.bssid}\nSecurity: {ap.security or "Open"}')
         self.password=tk.StringVar()
@@ -132,10 +138,12 @@ class NetworkScreen:
     def connected(self,result):
         self.connection_id,self.capabilities=result
         saved=self.manager.profiles.match(self.selected.bssid)
-        if self.startup and saved and self.capabilities.get('stratux_ip'):
+        if self.startup and saved and (self.capabilities.get('stratux_ip') or not saved.get('stratux_ip')):
             # This exact BSSID was already enrolled by the owner. Reconnecting is
             # not a new-device enrollment: reuse its name and preference, even if
-            # the receiver has no GPS fix or Internet access.
+            # the receiver has no GPS fix or Internet access. Saved home/FBO
+            # networks also continue without a receiver: Internet is a separate
+            # capability and a failed reachability probe must not re-enroll them.
             try:self.use_connection(saved['name'])
             except (ValueError,OSError) as exc:
                 self.name_page()
