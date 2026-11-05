@@ -38,6 +38,7 @@ class Selector:
         self.screen.pack(fill='both',expand=True)
         self.screen.bind('<KeyPress>',self.keyboard)
         self.screen.bind('<ButtonPress-1>',self.wheel_press)
+        self.screen.bind('<B1-Motion>',self.wheel_motion)
         self.screen.bind('<ButtonRelease-1>',self.wheel_release)
         self.screen.bind('<Destroy>',lambda event:self.stop_repeat())
         self.repeat_job=None
@@ -58,7 +59,6 @@ class Selector:
         c.button((360,19,440,99),'×',self.close,'cancel',59)
         c.box((174,109,626,193))
         c.label(400,151,self.code.get().upper() or 'Enter airport ID',42,bold=True)
-        c.box((83,209,717,281))
         if airport:
             fix=getattr(self.display,'airport_fix',None)
             detail='Position unavailable'
@@ -78,7 +78,7 @@ class Selector:
         c.button((298,530,502,592),'▼',lambda:self.spin(1))
         c.button((42,344,264,425),'⌫ Back',lambda:self.key('back'),'edit')
         c.button((47,442,264,523),'Clear',lambda:self.key('clear'),'edit')
-        c.button((535,367,753,495),'→ Next',
+        c.button((535,367,753,495),'→ Select',
                  self.append_selected if len(self.code.get())<7 else None)
         c.label(400,610,self.message.get(),16,'#ffd45c',width=max(1,round(480*c.scale)))
         c.button((226,638,574,709),'✓ Done',self.go if airport else None,'confirm',37)
@@ -93,6 +93,7 @@ class Selector:
         y=(event.y-c.offset[1])/c.scale
         self.press=(x,y)
         self.repeated=False
+        self.dragged=False
         if 298<=x<=502 and (294<=y<=356 or 530<=y<=592):
             step=-1 if y<=356 else 1
             self.repeat_job=c.after(380,lambda:self.repeat_spin(step,145))
@@ -107,22 +108,31 @@ class Selector:
             self.screen.after_cancel(self.repeat_job)
             self.repeat_job=None
 
+    def gesture_delta(self,event):
+        x,y=self.press
+        c=self.screen
+        return (event.x-c.offset[0])/c.scale-x,(event.y-c.offset[1])/c.scale-y
+
+    def wheel_motion(self,event):
+        # A drag can start on a button or anywhere else on the selector. Once
+        # it moves far enough, cancel the hold timer and suppress button taps.
+        if self.press is not None and max(map(abs,self.gesture_delta(event)))>=24:
+            self.dragged=True
+            self.stop_repeat()
+
     def wheel_release(self,event):
         self.stop_repeat()
-        c=self.screen
         if self.press is None:
             return
-        x,y=self.press
+        dx,dy=self.gesture_delta(event)
         self.press=None
-        if self.repeated:
-            return
-        dy=(event.y-c.offset[1])/c.scale-y
-        dx=(event.x-c.offset[0])/c.scale-x
-        if 307<=x<=493 and 361<=y<=525 and abs(dy)>=24 and abs(dy)>abs(dx):
-            steps=max(1,round(abs(dy)/42))
+        if abs(dy)>=24 and abs(dy)>abs(dx):
+            # Longer gestures move farther through the alphabet. The wheel
+            # wraps between the last digit and the first letter.
+            steps=max(1,round(abs(dy)/30))
             self.spin(steps if dy<0 else -steps)
-        elif abs(dy)<24 and abs(dx)<24:
-            c.tap(event)
+        elif not self.repeated and not self.dragged and max(abs(dx),abs(dy))<24:
+            self.screen.tap(event)
 
     def spin(self, step):
         self.wheel=(self.wheel+step)%len(CHARACTERS)
