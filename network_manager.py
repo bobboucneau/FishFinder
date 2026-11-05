@@ -99,6 +99,19 @@ class Profiles:
         return entry
 
 
+def network_rows(profiles, aps):
+    """Group matching Wi-Fi radios while retaining receiver identities."""
+    groups = {}
+    for ap in aps:
+        saved = profiles.match(ap.bssid) or {}
+        receiver = ('stratux' in ap.ssid.casefold() or saved.get('stratux_ip')
+                    or ap.bssid == profiles.data.get('preferred'))
+        security = tuple(sorted(ap.security.split()))
+        key = (ap.ssid, security, ap.device, ap.bssid if receiver else None)
+        groups.setdefault(key, []).append(ap)
+    return [tuple(group) for group in groups.values()]
+
+
 def selection(profiles,aps):
     # Return an automatic choice only for the explicitly preferred receiver.
     # A sole alternative receiver still needs the user's confirmation.
@@ -112,7 +125,7 @@ def selection(profiles,aps):
 class Manager:
     def __init__(self,profiles=None,runner=None):
         self.profiles=profiles or Profiles();self.runner=runner or subprocess.run
-        self.lock=threading.Lock();self.selected=None;self.last_result=None
+        self.lock=threading.Lock();self.selected=None;self.last_result=None;self.roaming=False
 
     def nm(self,*arguments,password=None):
         # Secrets are sent through stdin for nmcli --ask, never command arguments,
@@ -145,7 +158,7 @@ class Manager:
         try:return str(uuid.UUID(value))
         except ValueError:raise RuntimeError('Connected network has no usable saved profile.')
 
-    def connect(self,ap,password=None):
+    def connect(self,ap,password=None,members=()):
         with self.lock:
             saved=self.profiles.match(ap.bssid)
             # Disable automatic selection of arbitrary networks by NM on THIS
@@ -153,23 +166,34 @@ class Manager:
             # still work; other interfaces/profiles are not modified or deleted.
             self.nm('device','set',ap.device,'autoconnect','no')
             if saved:
-                self.nm('--wait','30','connection','up','uuid',saved['uuid'],'ifname',ap.device,'ap',ap.bssid)
+                if members:
+                    # Earlier FishFinder releases pinned even home profiles.
+                    self.nm('connection','modify','uuid',saved['uuid'],'802-11-wireless.bssid','')
+                command = ['--wait','30','connection','up','uuid',saved['uuid'],'ifname',ap.device]
+                if not members:
+                    command.extend(('ap',ap.bssid))
+                self.nm(*command)
                 connection_id=saved['uuid']
             elif ap.active:
                 connection_id=self.current_uuid(ap.device)
             else:
                 identifier='FishFinder-'+uuid.uuid4().hex[:12]
-                self.nm('--ask','--wait','30','device','wifi','connect',ap.bssid,'ifname',ap.device,
-                        'name',identifier,'private','yes',password=password or '')
+                self.nm('--ask','--wait','30','device','wifi','connect',ap.ssid if members else ap.bssid,
+                        'ifname',ap.device,'name',identifier,'private','yes',password=password or '')
                 connection_id=self.current_uuid(ap.device)
-            self.nm('connection','modify','uuid',connection_id,'802-11-wireless.bssid',ap.bssid,
-                    'connection.autoconnect','no')
             active=self.nm('-t','--escape','yes','-f','BSSID,IN-USE','device','wifi','list','ifname',ap.device,'--rescan','no')
-            if not any(fields(line)==[ap.bssid,'*'] for line in active.splitlines()):
-                raise RuntimeError('Connected access point did not match the selected BSSID.')
-            self.selected=(ap,connection_id)
+            active_bssids = {row[0] for line in active.splitlines()
+                             if len(row := fields(line)) == 2 and row[1] == '*'}
+            connected = next((candidate for candidate in (members or (ap,))
+                              if candidate.bssid in active_bssids), None)
+            if connected is None:
+                raise RuntimeError('Connected BSSID did not match the selection.')
             result=self.probe(ap.device,saved.get('stratux_ip') if saved else None)
-            authorize(ap,result['stratux_ip'])
+            self.roaming = bool(members and not result['stratux_ip'])
+            self.nm('connection','modify','uuid',connection_id,'802-11-wireless.bssid',
+                    '' if self.roaming else connected.bssid,'connection.autoconnect','no')
+            self.selected=(connected,connection_id)
+            authorize(connected,result['stratux_ip'])
             return connection_id,result
 
     def probe(self,device,configured=None):
@@ -210,7 +234,14 @@ class Manager:
             try:
                 ap,connection_id=self.selected
                 active=self.nm('-t','--escape','yes','-f','BSSID,IN-USE','device','wifi','list','ifname',ap.device,'--rescan','no')
-                if not any(fields(line)==[ap.bssid,'*'] for line in active.splitlines()):
+                if self.roaming:
+                    try:
+                        connected = self.current_uuid(ap.device) == connection_id
+                    except RuntimeError:
+                        connected = False
+                    if not connected:
+                        self.nm('--wait','8','connection','up','uuid',connection_id,'ifname',ap.device)
+                elif not any(fields(line)==[ap.bssid,'*'] for line in active.splitlines()):
                     self.nm('--wait','8','connection','up','uuid',connection_id,'ifname',ap.device,'ap',ap.bssid)
             except RuntimeError:pass
             finally:self.lock.release()

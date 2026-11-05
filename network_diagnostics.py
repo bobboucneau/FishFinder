@@ -60,10 +60,12 @@ def connection(manager):
         # Recover the friendly FishFinder name only for the actually active AP.
         active=manager.nm('-t','--escape','yes','-f','BSSID,IN-USE',
                           'device','wifi','list','ifname',device,'--rescan','no')
+        bssid = None
         for line in active.splitlines():
             row=fields(line)
             if len(row)==2 and row[1]=='*':
-                saved=manager.profiles.match(row[0])
+                bssid = row[0]
+                saved=manager.profiles.match(bssid)
                 if saved:name=saved['name']
                 break
-        return dict(connected=True,name=name,device=device,ipv4=addresses4,ipv6=addresses6,gateway=gateway)
+        return dict(connected=True,name=name,device=device,ipv4=addresses4,ipv6=addresses6,gateway=gateway,bssid=bssid)

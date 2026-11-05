@@ -61,7 +61,7 @@ class Tests(unittest.TestCase):
     def test_choose_saved_network_connects_immediately(self):
         self.ui.busy=False
         self.ui.list=SimpleNamespace(curselection=lambda:(0,))
-        self.ui.aps=[OTHER]
+        self.ui.rows=[(OTHER,)]
         self.profiles.save(OTHER,'home-uuid','Home',dict(CAP,stratux_ip=None))
         self.ui.connect=MagicMock();self.ui.clear=MagicMock()
         self.ui.choose()

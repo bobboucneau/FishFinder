@@ -67,6 +67,7 @@ class NetworkScreen:
                 ipv4=', '.join(info.get('ipv4',[])) or 'unavailable'
                 ipv6=', '.join(info.get('ipv6',[])[:2])
                 text=f"{info['name']} · {info['device']}\nIP: {ipv4}\nGateway: {info.get('gateway') or 'unavailable'}"
+                if info.get('bssid'):text+='\nBSSID: '+info['bssid']
                 if ipv6:text+='\nIPv6: '+ipv6
                 self.connection_text.set(text)
             self.message.set('Select Test host to check a destination.')
@@ -210,6 +211,7 @@ class NetworkScreen:
             if automatic and kind=='preferred':
                 # Stay on the progress page through association and receiver
                 # verification. connected() continues directly for the saved AP.
+                self.members=()
                 self.selected=ap
                 self.message.set('Connecting to preferred receiver…')
                 self.connect()
@@ -217,14 +219,19 @@ class NetworkScreen:
             # A complete scan found no automatic preferred match. Only now make
             # the chooser visible, with the available networks already known.
             self.list_page()
-            for item in aps:
-                saved=self.manager.profiles.match(item.bssid)
-                title=saved['name'] if saved else item.ssid
-                self.list.insert('end',f'{title} · {item.signal}% · {item.bssid[-8:]}'+(' ✓' if item.active else ''))
+            self.rows = nm.network_rows(self.manager.profiles, aps)
+            for group in self.rows:
+                item = group[0]
+                saved = self.manager.profiles.match(item.bssid)
+                title = saved['name'] if saved and len(group) == 1 else item.ssid
+                detail = item.bssid[-8:] if len(group) == 1 else item.security or 'Open'
+                signal = max(candidate.signal for candidate in group)
+                active = ' ✓' if any(candidate.active for candidate in group) else ''
+                self.list.insert('end', f'{title} · {signal}% · {detail}'+active)
             if kind=='alternative':
-                self.list.selection_set(aps.index(ap))
+                self.list.selection_set(next(i for i, group in enumerate(self.rows) if ap in group))
                 self.message.set('Preferred receiver unavailable. Connect to the listed alternative, wait, or choose another network.')
-            else:self.message.set('Select a network; full SSID/BSSID appears before connecting.' if aps else 'No networks found. Wait / Retry, or Skip.')
+            else:self.message.set('Select a network to connect.' if aps else 'No networks found. Wait / Retry, or Skip.')
             if automatic and preferred and kind!='preferred':
                 self.message.set('Preferred Stratux unavailable. Wait / Retry, or select another network.')
         self.job(self.manager.scan,complete)
@@ -233,7 +240,13 @@ class NetworkScreen:
         if self.busy:return
         selected=self.list.curselection()
         if not selected:self.message.set('Select a network first.');return
-        self.selected=self.aps[selected[0]];ap=self.selected;saved=self.manager.profiles.match(ap.bssid)
+        group = self.rows[selected[0]]
+        self.members = group if len(group) > 1 else ()
+        # Prefer a saved profile so we can reuse its password. Otherwise keep an
+        # existing association when possible.
+        ap = next((item for item in group if self.manager.profiles.match(item.bssid)), None)
+        self.selected = ap = ap or next((item for item in group if item.active), group[0])
+        saved = self.manager.profiles.match(ap.bssid)
         if saved:
             # The list already identifies this enrolled BSSID by its saved name.
             # Connect is the user's explicit choice; no second confirmation or
@@ -241,7 +254,8 @@ class NetworkScreen:
             self.connect()
             return
         self.clear();self.label(saved['name'] if saved else ap.ssid)
-        self.label(f'SSID: {ap.ssid}\nBSSID: {ap.bssid}\nSecurity: {ap.security or "Open"}')
+        identity = 'Automatic access point selection' if self.members else f'BSSID: {ap.bssid}'
+        self.label(f'SSID: {ap.ssid}\n{identity}\nSecurity: {ap.security or "Open"}')
         self.password=tk.StringVar()
         if ap.security not in ('','--') and not saved and not ap.active:
             self.label('Wi-Fi password')
@@ -249,8 +263,8 @@ class NetworkScreen:
             entry.bind('<Button-1>',lambda event:self.keyboard(entry))
             if '802.1X' in ap.security or 'WEP' in ap.security:
                 self.message.set('Enterprise/WEP networks need an administrator-created NetworkManager profile.');self.status()
-                self.button('Back',self.list_page);return
-        self.status();self.button('Connect / Retry',self.connect);self.button('Other networks',self.list_page)
+                self.button('Back',lambda:self.scan());return
+        self.status();self.button('Connect / Retry',self.connect);self.button('Other networks',lambda:self.scan())
 
     def connect(self):
         if self.busy:return
@@ -258,11 +272,22 @@ class NetworkScreen:
         # Remove password from the visible Tk variable immediately after capture.
         if hasattr(self,'password'):self.password.set('')
         self.message.set('Connecting, checking BSSID, probing Stratux and Internet…')
-        self.job(lambda:self.manager.connect(self.selected,password),self.connected)
+        members = getattr(self, 'members', ())
+        self.job(lambda:self.manager.connect(self.selected,password,members=members)
+                 if members else self.manager.connect(self.selected,password),self.connected)
 
     def connected(self,result):
         self.connection_id,self.capabilities=result
         saved=self.manager.profiles.match(self.selected.bssid)
+        if getattr(self,'members',()):
+            self.selected = self.manager.selected[0]
+            if self.capabilities['stratux_ip']:
+                saved = self.manager.profiles.match(self.selected.bssid)
+            elif saved:
+                # The saved home profile follows its network across radios.
+                self.use_connection(saved['name'])
+                self.close()
+                return
         if self.startup and saved and (self.capabilities.get('stratux_ip') or not saved.get('stratux_ip')):
             # This exact BSSID was already enrolled by the owner. Reconnecting is
             # not a new-device enrollment: reuse its name and preference, even if

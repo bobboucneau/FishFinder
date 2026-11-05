@@ -74,6 +74,29 @@ class Tests(unittest.TestCase):
         self.assertTrue(any(kw['input']=='secret-value\n' for _,kw in calls))
         self.assertTrue(any('802-11-wireless.bssid' in args and AP.bssid in args for args,_ in calls))
 
+    def test_home_radios_group_but_receivers_and_security_stay_distinct(self):
+        from dataclasses import replace
+        home = replace(AP, ssid='Home', security='WPA2')
+        extender = replace(OTHER, ssid='Home', security='WPA2')
+        unsecured = replace(extender, bssid='AA:BB:CC:DD:EE:03', security='--')
+        self.assertEqual(n.network_rows(self.profiles, [home, extender, unsecured, AP, OTHER]),
+                         [(home, extender), (unsecured,), (AP,), (OTHER,)])
+
+    def test_group_connection_accepts_another_matching_radio(self):
+        from dataclasses import replace
+        home = replace(AP, ssid='Home', security='WPA2')
+        extender = replace(OTHER, ssid='Home', security='WPA2')
+        manager = n.Manager(self.profiles)
+        with patch.object(manager, 'nm', side_effect=['', '', r'AA\:BB\:CC\:DD\:EE\:02:*', '']) as nm, \
+             patch.object(manager, 'current_uuid', return_value='test-uuid'), \
+             patch.object(manager, 'probe', return_value=dict(CAP, stratux_ip=None)), \
+             patch('network_manager.authorize') as authorize:
+            manager.connect(home, 'password', members=(home, extender))
+        self.assertIn('Home', nm.call_args_list[1].args)
+        self.assertEqual(manager.selected, (extender, 'test-uuid'))
+        self.assertTrue(manager.roaming)
+        authorize.assert_called_once_with(extender, None)
+
     def test_bssid_mismatch_fails(self):
         self.profiles.save(AP,'id','Saved',CAP)
         m=n.Manager(self.profiles,lambda *a,**k:SimpleNamespace(returncode=0,stdout=r'AA\:BB\:CC\:DD\:EE\:02:*'))
