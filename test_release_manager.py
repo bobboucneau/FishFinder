@@ -28,7 +28,7 @@ class ReleaseTests(unittest.TestCase):
         version={'version':identifier,'files':{name:hashlib.sha256(value).hexdigest() for name,value in files.items()}}
         with zipfile.ZipFile(archive,'w') as z:
             for name,value in files.items():z.writestr('package/'+name,value)
-            z.writestr('package/VERSION.json',json.dumps(version))
+            z.writestr('package/VERSION.json',json.dumps(dict(version, data_architecture=1)))
             if extra:extra(z)
         tools.make_manifest(archive,identifier,sequence,manifest,platform='any')
         signature.write_bytes(base64.b64encode(self.key.sign(manifest.read_bytes())))

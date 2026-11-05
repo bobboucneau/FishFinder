@@ -540,7 +540,7 @@ class Display:
             self.text(x+9,status_y,label,fill=colors[state],size=9,anchor='w')
             x+=width+gap
         if snap.error:warnings.insert(0,('Storage / database unavailable','red'))
-        elif self.permission_issues:warnings.insert(0,('Write access · see Setup','amber'))
+        elif self.permission_issues:warnings.insert(0,('Write access · see Config','amber'))
         # Red hardware/database faults are included even when they have no
         # permanently visible status dot. Only the outer ring changes color.
         if any(state=='red' for _,state in states+warnings):
@@ -940,7 +940,7 @@ class Display:
             self.text(400,644,'Recenter traffic',size=10)
             self.buttons.append((302,631,498,657,self.recenter))
         self.scope_button((220,165,394,211),'Airport',self.open_airport_selector)
-        self.scope_button((406,165,580,211),'Setup',self.open_setup)
+        self.scope_button((406,165,580,211),'Config',self.open_setup)
         self.scope_button((325,226,475,282),'Power',self.request_poweroff,'cancel')
         if airport_map:
             for item in c.find_all()[overlay_start:]:c.delete(item)
@@ -965,7 +965,7 @@ class Display:
             notice='Map unavailable' if self.ground.error else 'Map loading...' if self.ground_image is None or time.monotonic()-self.ground_image_time>3 else 'Map coverage partial' if origin and self.ground.bounds and not self.ground.covers(origin,self.radius_nm) else ''
             if notice:self.text(400,585,notice,fill=MUTED,size=9)
         if self.permission_issues:
-            self.text(400,620,'Write access needs attention · see Setup',fill=YELLOW,size=10,width=330*self.unit)
+            self.text(400,620,'Write access needs attention · see Config',fill=YELLOW,size=10,width=330*self.unit)
         # Popups are drawn above the scope. A reserved ownship selection opens ownship
         # details; an ordinary key opens a traffic target. The crowded-target chooser has its
         # own stable list.
@@ -990,7 +990,11 @@ class Display:
         if getattr(self.args,"db",None) and database_notice(self.args.db).is_file():
             self.rect(115,325,685,475,fill='#31191e',outline=RED,width=2)
             self.text(400,365,'Database check failed',size=19)
-            self.text(400,420,'Recording stopped. Data preserved. Restore a verified backup before restarting.',size=13,width=500*self.unit)
+            from support_tools import recovery_offered
+            detail = ('Recording stopped. Open Config → Support for Fresh Start.'
+                      if recovery_offered(self.args.db) else
+                      'Recording stopped. Check storage permissions or see the support logs.')
+            self.text(400,420,detail,size=13,width=500*self.unit)
         if self.exit_pending:self.draw_exit_dialog()
 
     def surface_box(self,bounds,role='panel'):

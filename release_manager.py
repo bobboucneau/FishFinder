@@ -188,10 +188,32 @@ class Store:
             if trial and not trial['owner_build']:state['high_watermark']=max(state['high_watermark'],trial['sequence'])
             state['trial']=None;atomic(self.state_path,state)
 
+    def rollback_target(self, state=None):
+        state = state or self.state()
+        previous = state.get('previous')
+        current = state.get('current')
+        if not previous or previous == current or not self.release(previous).is_dir():
+            return None
+
+        def architecture(identifier):
+            version = read(self.release(identifier) / 'VERSION.json', {})
+            # 0.4.47 was verified against the first explicit architecture.
+            if identifier == '0.4.47' and version.get('version') == identifier:
+                return 1
+            return version.get('data_architecture')
+
+        active_architecture = architecture(current)
+        previous_architecture = architecture(previous)
+        if type(active_architecture) is int and type(previous_architecture) is int and active_architecture == previous_architecture:
+            return previous
+        return None
+
     def rollback(self):
         with self.locked():
-            state=self.state()
-            if not state.get('previous'):raise ValueError('No previous release to restore')
-            state['current'],state['previous']=state['previous'],state['current']
-            state['trial']=None;atomic(self.state_path,state)
+            state = self.state()
+            previous = self.rollback_target(state)
+            if previous is None:
+                raise ValueError('No compatible previous release to restore')
+            state.update(current=previous, previous=None, trial=None)
+            atomic(self.state_path,state)
             return state

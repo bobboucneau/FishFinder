@@ -81,7 +81,9 @@ def main():
             if not store.state().get('previous'):raise ValueError('No previous release to restore')
             # Request a supervisor restart rather than switching files underneath
             # running processes. The next supervisor startup performs the rollback.
-            atomic(store.home/'runtime/rollback-request.json',{'requested':True})
+            target=store.rollback_target()
+            if not target:raise ValueError('No compatible previous release to restore')
+            atomic(store.home/'runtime/rollback-request.json',{'target':target})
             print('Rollback requested. Running launcher will restart into the retained previous version.')
     except (ValueError,OSError,KeyError,zipfile.BadZipFile) as exc:parser.exit(1,str(exc)+'\n')
 

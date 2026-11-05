@@ -551,7 +551,9 @@ def main():
     try:
         check_database(DATABASE_PATH)
     except sqlite3.Error as exc:
-        message = f'Database check failed: {exc}. Data preserved. Restore a verified backup before restarting.'
+        from support_tools import corruption_error
+        label = 'Corrupt database' if corruption_error(exc) else 'Database check failed'
+        message = f'{label}: {exc}. Recording stopped. Data preserved.'
         logging.error('%s (%s)', message, DATABASE_PATH)
         temporary = notice.with_suffix('.startup-error.tmp')
         temporary.write_text(message)

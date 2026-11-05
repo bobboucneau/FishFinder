@@ -58,10 +58,12 @@ class Launcher:
         try:
             request=self.store.home/'runtime/rollback-request.json'
             if request.exists():
-                self.store.rollback();request.unlink()
+                target = self.store.rollback_target()
+                if target and read(request,{}).get('target',target) == target:self.store.rollback()
+                request.unlink()
             state=self.store.state()
             if state.get('trial'):
-                if state.get('previous'):self.store.rollback()
+                if self.store.rollback_target(state):self.store.rollback()
             pending=read(self.store.pending_path,None)
             if pending and pending['policy']=='next-start':self.store.activate()
             elif pending and pending['policy']=='later':self.store.defer('ask')
@@ -76,6 +78,7 @@ class Launcher:
                  FISHFINDER_RELEASE_ID=state['current'],
                  FISHFINDER_OWNER_BUILD='1' if read(self.store.release(state['current'])/'.release.json',{}).get('owner_build') else '0',
                  FISHFINDER_MODE_CONTROL='1',
+                 FISHFINDER_SUPPORT_CONTROL='1',
                  FISHFINDER_DEMO_AIRPORT=self.demo_airport,
                  FISHFINDER_AIRPORTS=str(shared/'airports.json'),
                  FISHFINDER_PYTHON=self.args.python,
@@ -181,6 +184,21 @@ class Launcher:
         write_json(self.store.home/'shared/operation.json',{'mode':mode,'airport':airport})
         self.failures=0;self.launch()
 
+    def recover_database(self):
+        from support_tools import damaged, fresh_start
+        database = Path(self.args.database)
+        if not damaged(database):
+            return
+        self.stop_children()
+        try:
+            # Use the same writer lock as Finder.bash. A separate collector
+            # must never have the database open while we recover it.
+            with (database.parent/'collector.lock').open('a') as lock:
+                fcntl.flock(lock,fcntl.LOCK_EX | fcntl.LOCK_NB)
+                fresh_start(database,self.store.home/'support')
+        finally:
+            self.launch()
+
     def poll(self):
         if self.quitting:return
         try:
@@ -191,7 +209,17 @@ class Launcher:
                 self.switch_mode(request)
             rollback=self.store.home/'runtime/rollback-request.json'
             if rollback.exists():
-                self.stop_children();self.store.rollback();rollback.unlink();self.launch()
+                requested = read(rollback,{})
+                rollback.unlink()
+                target = self.store.rollback_target()
+                if target and requested.get('target',target) == target:
+                    self.stop_children();self.store.rollback();self.launch()
+            fresh = self.store.home/'runtime/fresh-start-request.json'
+            if fresh.exists() and not self.prompt:
+                request = read(fresh,{})
+                fresh.unlink()
+                if request.get('database') == self.args.database:
+                    self.recover_database()
             pending=read(self.store.pending_path,None)
             if pending and pending['policy']=='ask' and self.prompted!=pending['release']:
                 self.prompted=pending['release'];self.update_prompt(pending)
@@ -210,7 +238,7 @@ class Launcher:
                     self.display=None;self.root.withdraw()
                 elif failed or (not fresh and now-self.started>60):
                     self.stop_children()
-                    if state.get('trial') and state.get('previous'):
+                    if state.get('trial') and self.store.rollback_target(state):
                         self.store.rollback();self.problem('New release failed startup; restoring previous version.');self.launch()
                     elif self.failures<2:
                         self.failures+=1;self.launch()

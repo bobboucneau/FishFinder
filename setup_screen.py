@@ -13,6 +13,8 @@
 # Changing Wi-Fi is a user-triggered action; the program does not choose a new
 # network merely because the current Stratux connection is unavailable.
 
+import os
+from pathlib import Path
 import queue
 import shutil
 import subprocess
@@ -37,11 +39,12 @@ class Setup:
         self.vars={};self.focus=None;self.keyboard=None;self.refresh_button=None
         for key,value in display.config.items():
             self.vars[key]=tk.BooleanVar(value=value) if isinstance(value,bool) else tk.StringVar(value=str(value))
-        tk.Label(self.frame,text='FishFinder setup',bg=BG,fg=FG,font=('DejaVu Sans',16)).pack(pady=5)
+        tk.Label(self.frame,text='FishFinder Config',bg=BG,fg=FG,font=('DejaVu Sans',16)).pack(pady=5)
         nav=tk.Frame(self.frame,bg=BG);nav.pack()
-        self.button(nav,'Display',lambda:self.show_page(0)).pack(side='left',padx=4)
-        self.button(nav,'Receiver / Updates',lambda:self.show_page(1)).pack(side='left',padx=4)
-        self.button(nav,'Demo',lambda:self.show_page(2)).pack(side='left',padx=4)
+        self.button(nav,'Display',lambda:self.show_page(0)).pack(side='left',padx=2)
+        self.button(nav,'Receiver',lambda:self.show_page(1)).pack(side='left',padx=2)
+        self.button(nav,'Demo',lambda:self.show_page(2)).pack(side='left',padx=2)
+        self.button(nav,'Support',lambda:self.show_page(3)).pack(side='left',padx=2)
         self.status=tk.StringVar(value='; '.join(getattr(display,'permission_issues',[])) or 'Changes apply when you tap Save.')
         bottom=tk.Frame(self.frame,bg=BG);bottom.pack(side='bottom',pady=5)
         self.button(bottom,'Cancel / Back',self.close).pack(side='left',padx=5)
@@ -51,10 +54,11 @@ class Setup:
         self.show_page(0);self.frame.after(250,self.poll)
 
     def show_page(self,index):
-        if self.busy:self.status.set('Wait for the airport update before switching pages.');return
+        if self.busy:self.status.set('Wait for the current operation before switching pages.');return
         self.hide_keyboard();self.refresh_button=None
         for child in self.page.winfo_children():child.destroy()
         if index==2:self.demo_page();return
+        if index==3:self.support_page();return
         fields=([('default_range','Range (NM)'),('label_size','Label size'),('orientation','Map orientation'),('ownship_symbol','Ownship airplane'),
                  ('horizon_minutes','Projection (minutes)'),('idle_seconds','Hide controls (seconds)'),('trail_seconds','Trail (seconds)')]
                 if index==0 else [('stratux_ip','Stratux IP'),('own_tail','Your tail number'),
@@ -120,6 +124,115 @@ class Setup:
         self.button(self.page,'Confirm change',confirm).pack(pady=10)
         self.button(self.page,'Cancel',lambda:self.show_page(2)).pack(pady=10)
 
+    def support_page(self):
+        from release_manager import Store, atomic, read
+        import support_tools
+
+        base = os.environ.get('FISHFINDER_HOME')
+        if not base:
+            self.status.set('Support requires the FishFinder appliance launcher.')
+            return
+        home = Path(base)
+        support = home / 'support'
+        config = support / 'destination.json'
+        db = getattr(self.display.args, 'db', None)
+        launcher = os.environ.get('FISHFINDER_SUPPORT_CONTROL') == '1'
+        previous = Store(home).rollback_target() if launcher else None
+        address = tk.StringVar(value=read(config, {}).get('sftp', ''))
+        self.status.set('Support exports stay on this device until you approve sending.')
+        tk.Label(self.page,text='SFTP destination',bg=BG,fg=FG).pack(pady=(8,2))
+        entry = tk.Entry(self.page,textvariable=address,width=38)
+        entry.pack()
+        entry.bind('<Button-1>',lambda event:self.show_keyboard(entry))
+
+        def save_destination():
+            value = address.get().strip()
+            support.mkdir(mode=0o700,parents=True,exist_ok=True)
+            atomic(config, {'sftp': support_tools.destination(value) if value else ''})
+            return value
+
+        def save_address():
+            try:
+                save_destination()
+                self.status.set('Support destination saved.')
+            except (OSError, ValueError) as exc:
+                self.status.set(str(exc))
+
+        self.button(self.page,'Save destination',save_address).pack(pady=4)
+        include = tk.BooleanVar(value=False)
+        if (support/'latest-damaged.zip').is_file():
+            tk.Checkbutton(self.page,text='Include latest damaged database',variable=include,
+                           bg=BG,fg=FG,selectcolor=BG).pack()
+        tk.Label(self.page,text='Bundle includes release state and recent logs. Logs and\n'
+                                'a damaged database may contain aircraft or location data.',
+                 bg=BG,fg=FG).pack(pady=5)
+
+        def export(send=False):
+            if self.busy:
+                return
+            try:
+                target = support_tools.destination(address.get()) if send else ''
+            except ValueError as exc:
+                self.status.set(str(exc))
+                return
+            include_db = include.get()
+            def work():
+                path = support_tools.bundle(home, include_db)
+                if send:
+                    support_tools.upload(path, target)
+                return 'Support bundle sent.' if send else 'Support bundle saved locally.'
+            if send:
+                self.support_confirm('Send the selected support data to '+target+'?',
+                                     lambda:self.support_job(work))
+            else:
+                self.support_job(work)
+
+        actions = tk.Frame(self.page,bg=BG)
+        actions.pack(pady=4)
+        self.button(actions,'Create bundle',export).pack(side='left',padx=3)
+        self.button(actions,'Send bundle',lambda:export(True)).pack(side='left',padx=3)
+
+        def request(filename, payload):
+            try:
+                atomic(home/'runtime'/filename, payload)
+                self.status.set('Request sent. FishFinder will restart.')
+            except OSError as exc:
+                self.status.set(str(exc))
+
+        if launcher and db and support_tools.recovery_offered(db):
+            self.button(self.page,'Fresh Start',lambda:self.support_confirm(
+                'Save the damaged database for support and start with an empty database?',
+                lambda:request('fresh-start-request.json',{'database':str(db)}))).pack(pady=4)
+        if previous:
+            self.button(self.page,'Roll back to '+previous,lambda:self.support_confirm(
+                'Restart FishFinder on '+previous+'?',
+                lambda:request('rollback-request.json',{'target':previous}))).pack(pady=4)
+        else:
+            tk.Label(self.page,text='No compatible previous release available' if launcher else
+                     'Reboot to enable the updated recovery launcher.',bg=BG,fg=FG).pack(pady=4)
+
+    def support_confirm(self, message, action):
+        self.hide_keyboard()
+        for child in self.page.winfo_children():
+            child.destroy()
+        tk.Label(self.page,text=message,wraplength=420,bg=BG,fg=FG,
+                 font=('DejaVu Sans',16)).pack(pady=22)
+        self.button(self.page,'Confirm',action).pack(pady=5)
+        self.button(self.page,'Cancel',lambda:self.show_page(3)).pack(pady=5)
+
+    def support_job(self, work):
+        if self.busy:
+            return
+        self.busy = True
+        self.status.set('Working on support bundle…')
+        def run():
+            try:
+                message = work()
+            except Exception as exc:
+                message = str(exc)
+            self.jobs.put((False, message))
+        threading.Thread(target=run,daemon=True,name='support-bundle').start()
+
     def button(self,parent,label,command):
         return RoundedButton(parent,label,command,role='confirm' if label=='Save / Back' else 'cancel' if label=='Cancel / Back' else 'nav')
 
@@ -162,7 +275,7 @@ class Setup:
 
     def close(self):
         if self.busy:
-            self.status.set('Airport update is running. Wait for completion before leaving.');return
+            self.status.set('Wait for the current operation before leaving.');return
         self.closed=True;self.frame.destroy();self.display.setup_panel=None
         import time
         self.display.last_touch=time.monotonic();self.display.draw()
