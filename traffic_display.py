@@ -1230,7 +1230,7 @@ class Display:
         self.root.update_idletasks()
         def run():
             try:
-                subprocess.run(['/usr/bin/sudo','-n','/usr/bin/systemctl','poweroff'],
+                subprocess.run(['/usr/bin/sudo','-n','/usr/bin/systemctl','--no-wall','poweroff'],
                                check=True,timeout=10,capture_output=True)
             except (OSError,subprocess.SubprocessError):
                 self.power_message='Shutdown unavailable. Ask the administrator to enable it.'
