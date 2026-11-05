@@ -10,11 +10,12 @@ BG='#07131f';FG='#e0f2ef'
 
 
 class Selector:
-    def __init__(self,display):
+    def __init__(self,display,*,initial_code=None,on_select=None):
+        self.on_select = on_select
         self.display=display;self.frame=tk.Frame(display.root,bg=BG,highlightbackground='#62b6ff',highlightthickness=2)
         self.frame.place(relx=.5,rely=.5,anchor='center',relwidth=.70,relheight=.70)
         self.body=tk.Frame(self.frame,bg=BG);self.body.pack(fill='both',expand=True,padx=12,pady=8)
-        self.code=tk.StringVar(value=display.config.get('manual_airport',''))
+        self.code=tk.StringVar(value=display.config.get('manual_airport','') if initial_code is None else initial_code)
         saved=display.catalog.airports.get(self.code.get())
         if saved:self.code.set(saved['code'])
         self.message=tk.StringVar(value='')
@@ -82,7 +83,8 @@ class Selector:
                  self.append_selected if len(self.code.get())<7 else None)
         c.label(400,610,self.message.get(),16,'#ffd45c',width=max(1,round(480*c.scale)))
         c.button((226,638,574,709),'✓ Done',self.go if airport else None,'confirm',37)
-        c.button((302,720,498,768),'Nearby airports',self.nearby,size=20)
+        if self.on_select is None:
+            c.button((302,720,498,768),'Nearby airports',self.nearby,size=20)
 
     def wheel_press(self,event):
         # Save the starting point in design units, so gestures scale with the UI.
@@ -159,7 +161,10 @@ class Selector:
     def go(self):
         try:
             airport=lookup(self.display.catalog,self.code.get())
-            self.display.choose_airport(airport['ident'],remember=True)
+            if self.on_select is None:
+                self.display.choose_airport(airport['ident'],remember=True)
+            else:
+                self.on_select(airport['ident'])
         except (ValueError,OSError) as exc:
             self.message.set(str(exc))
             self.draw_entry()

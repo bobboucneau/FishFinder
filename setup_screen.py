@@ -90,16 +90,28 @@ class Setup:
 
     def demo_page(self):
         self.status.set('Mode buttons apply after confirmation; Save is for other settings.')
-        import os
-        self.demo_code=tk.StringVar(value=os.environ.get('FISHFINDER_DEMO_AIRPORT','O22'))
+        if not hasattr(self,'demo_code'):
+            self.demo_code=tk.StringVar(value=os.environ.get('FISHFINDER_DEMO_AIRPORT','O22'))
         active=getattr(self.display.args,'moving_demo',False)
         tk.Label(self.page,text='DEMO MODE' if active else 'LIVE MODE',bg=BG,fg='#ffd45c' if active else FG,font=('DejaVu Sans',19,'bold')).pack(pady=12)
         tk.Label(self.page,text='Demo airport identifier',bg=BG,fg=FG,font=('DejaVu Sans',15)).pack(pady=6)
-        entry=tk.Entry(self.page,textvariable=self.demo_code,width=10,font=('DejaVu Sans',24),justify='center')
-        entry.pack(pady=8);entry.bind('<Button-1>',lambda event:self.show_keyboard(entry))
+        airport_button = self.button(self.page,self.demo_code.get(),self.select_demo_airport)
+        airport_button.pack(pady=8)
         self.button(self.page,'Start / restart demo',lambda:self.change_mode('demo')).pack(pady=8)
         self.button(self.page,'Return to live traffic',lambda:self.change_mode('live')).pack(pady=8)
         tk.Label(self.page,text='Synthetic traffic only. Switching restarts the display.\nLive records and Wi-Fi are preserved.',bg=BG,fg='#a8cce5',font=('DejaVu Sans',11),wraplength=450).pack(pady=6)
+
+    def select_demo_airport(self):
+        from airport_selector import Selector
+        if self.busy or self.display.airport_selector is not None:
+            return
+
+        def selected(identifier):
+            self.demo_code.set(identifier)
+            self.show_page(2)
+
+        self.display.airport_selector = Selector(
+            self.display, initial_code=self.demo_code.get(), on_select=selected)
 
     def change_mode(self,mode):
         import os
